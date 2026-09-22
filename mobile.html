@@ -209,11 +209,11 @@ async function loadList(manual){
 }
 
 function applyFilter(){
-  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const q = document.getElementById('searchInput').value.trim().toLowerCase().normalize('NFC');
   filtered = !q ? allItems.slice() : allItems.filter(it=>
-    (it.code||'').toLowerCase().includes(q) ||
-    (it.name||'').toLowerCase().includes(q) ||
-    (it.spec||'').toLowerCase().includes(q)
+    (it.code||'').toLowerCase().normalize('NFC').includes(q) ||
+    (it.name||'').toLowerCase().normalize('NFC').includes(q) ||
+    (it.spec||'').toLowerCase().normalize('NFC').includes(q)
   );
   renderList();
 }
