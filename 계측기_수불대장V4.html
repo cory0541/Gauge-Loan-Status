@@ -1103,7 +1103,7 @@ function compareInstruments(a, b, key){
 }
 function renderInstrumentTable(){
   const tbody = document.getElementById('instTable');
-  const search = (document.getElementById('instSearch').value||'').toLowerCase().normalize('NFC');
+  const search = (document.getElementById('instSearch').value||'').toLowerCase().normalize('NFC').replace(/\s+/g,'');
   const catF = document.getElementById('instCatFilter').value;
   const manageF = document.getElementById('instManageFilter').value;
   const statusF = document.getElementById('instStatusFilter').value;
@@ -1113,7 +1113,7 @@ function renderInstrumentTable(){
     if(manageF && i.manageType!==manageF) return false;
     if(statusF && i.status!==statusF) return false;
     if(search){
-      const hay = [i.code,i.name,i.spec,i.maker,i.serial,i.location,i.note,i.codeNo,i.modelNo].join(' ').toLowerCase().normalize('NFC');
+      const hay = [i.code,i.name,i.spec,i.maker,i.serial,i.location,i.note,i.codeNo,i.modelNo].join('|').toLowerCase().normalize('NFC').replace(/\s+/g,'');
       if(!hay.includes(search)) return false;
     }
     return true;
@@ -1186,9 +1186,9 @@ function comboOptionLabel(i){ return `${i.code} · ${i.name}${i.spec ? ' (' + i.
 
 function renderComboResults(prefix, filterText){
   const listEl = document.getElementById(prefix+'InstResults');
-  const q = (filterText||'').trim().toLowerCase().normalize('NFC');
+  const q = (filterText||'').trim().toLowerCase().normalize('NFC').replace(/\s+/g,'');
   const options = loanComboOptions[prefix] || [];
-  const filtered = q ? options.filter(i => (i.code+' '+i.name+' '+(i.spec||'')).toLowerCase().normalize('NFC').includes(q)) : options;
+  const filtered = q ? options.filter(i => (i.code+'|'+i.name+'|'+(i.spec||'')).toLowerCase().normalize('NFC').replace(/\s+/g,'').includes(q)) : options;
   if(!options.length){
     listEl.innerHTML = `<div class="combo-empty">${prefix==='loanOut'?'대여 가능한 계측기가 없습니다.':'대여중인 계측기가 없습니다.'}</div>`;
   } else if(!filtered.length){
