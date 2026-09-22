@@ -1,0 +1,1936 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>계측기 수불대장</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#EEF1F5;
+    --surface:#FFFFFF;
+    --surface-alt:#F5F7FA;
+    --ink:#1C2530;
+    --ink-muted:#64748B;
+    --ink-faint:#94A3B8;
+    --primary:#1D5C8A;
+    --primary-dark:#123F5E;
+    --primary-tint:#E4EEF5;
+    --amber:#B4711F;
+    --amber-tint:#FBF0E1;
+    --danger:#AC3B3B;
+    --danger-tint:#F8E9E9;
+    --success:#2F7D4F;
+    --success-tint:#E6F2EA;
+    --border:#DBE1E8;
+    --border-strong:#C3CBD5;
+    --font-disp:'IBM Plex Sans KR','IBM Plex Sans',sans-serif;
+    --font-body:'IBM Plex Sans KR','IBM Plex Sans',sans-serif;
+    --font-mono:'IBM Plex Mono',monospace;
+    --radius:6px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;font-family:var(--font-body);background:var(--bg);color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--primary);color:#fff;}
+
+  /* ---- tick-mark ruler motif (signature element) ---- */
+  .ruler{
+    height:10px;width:100%;
+    background-image:
+      repeating-linear-gradient(90deg, var(--border-strong) 0 1px, transparent 1px 8px),
+      repeating-linear-gradient(90deg, var(--border-strong) 0 1px, transparent 1px 40px);
+    background-size: 8px 6px, 40px 10px;
+    background-position: bottom, bottom;
+    background-repeat: repeat-x;
+    opacity:.55;
+  }
+  .ruler.tight{height:6px;}
+
+  /* ---- layout ---- */
+  .app{display:flex;min-height:100vh;}
+  .sidebar{
+    width:224px;flex-shrink:0;background:var(--primary-dark);color:#EAF1F6;
+    display:flex;flex-direction:column;position:sticky;top:0;height:100vh;
+  }
+  .brand{padding:20px 18px 14px;border-bottom:1px solid rgba(255,255,255,.12);}
+  .brand-mark{display:flex;align-items:center;gap:9px;}
+  .brand-title{font-family:var(--font-disp);font-weight:700;font-size:15.5px;letter-spacing:.2px;color:#fff;}
+  .brand-sub{font-family:var(--font-mono);font-size:10.5px;color:#9FC1D6;margin-top:3px;letter-spacing:.4px;}
+  .nav{flex:1;padding:10px 10px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
+  .nav-item{
+    display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius);
+    color:#C9DCE8;font-size:13.5px;font-weight:500;cursor:pointer;border:1px solid transparent;
+    user-select:none;
+  }
+  .nav-item svg{width:16px;height:16px;flex-shrink:0;opacity:.85;}
+  .nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
+  .nav-item.active{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.14);}
+  .nav-badge{
+    margin-left:auto;background:var(--amber);color:#fff;font-family:var(--font-mono);
+    font-size:10px;padding:1px 6px;border-radius:20px;min-width:16px;text-align:center;
+  }
+  .nav-badge.danger{background:var(--danger);}
+  .sidebar-foot{padding:12px 18px 16px;font-size:10.5px;color:#7FA3B9;font-family:var(--font-mono);border-top:1px solid rgba(255,255,255,.1);}
+
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;}
+  .topbar{
+    background:var(--surface);border-bottom:1px solid var(--border);padding:16px 28px;
+    display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5;
+  }
+  .topbar-title{font-family:var(--font-disp);font-size:19px;font-weight:700;color:var(--ink);}
+  .topbar-date{font-family:var(--font-mono);font-size:12.5px;color:var(--ink-muted);}
+  .content{padding:24px 28px 60px;max-width:1640px;width:100%;margin:0 auto;}
+  .view{display:none;}
+  .view.active{display:block;animation:fadein .18s ease;}
+  @keyframes fadein{from{opacity:0;transform:translateY(3px);}to{opacity:1;transform:none;}}
+
+  h2.section-title{font-family:var(--font-disp);font-size:15px;font-weight:700;margin:0 0 8px;color:var(--ink);}
+  .section-head{margin-bottom:16px;}
+  .section-desc{font-size:12.5px;color:var(--ink-muted);margin-top:2px;}
+
+  /* ---- cards / grid ---- */
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;}
+  .card-label{font-size:11.5px;color:var(--ink-muted);font-weight:500;text-transform:uppercase;letter-spacing:.4px;}
+  .card-value{font-family:var(--font-mono);font-size:28px;font-weight:600;margin-top:6px;color:var(--ink);}
+  .card-value.warn{color:var(--amber);}
+  .card-value.danger{color:var(--danger);}
+  .card-value.ok{color:var(--success);}
+  .card-sub{font-size:11px;color:var(--ink-faint);margin-top:4px;}
+
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:18px;overflow:hidden;}
+  .panel-head{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface-alt);}
+  .panel-head h3{margin:0;font-size:13.5px;font-family:var(--font-disp);font-weight:700;}
+  .panel-body{padding:16px 18px;}
+
+  /* ---- buttons / inputs ---- */
+  button{font-family:var(--font-body);cursor:pointer;}
+  .btn{
+    padding:8px 14px;border-radius:var(--radius);border:1px solid var(--border-strong);background:var(--surface);
+    color:var(--ink);font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:6px;
+    white-space:nowrap;flex-shrink:0;
+  }
+  .btn:hover{background:var(--surface-alt);}
+  .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff;}
+  .btn.primary:hover{background:var(--primary-dark);}
+  .btn.danger{background:var(--danger);border-color:var(--danger);color:#fff;}
+  .btn.ghost{border:1px solid transparent;background:transparent;box-shadow:none;}
+  .btn.ghost:hover{background:var(--surface-alt);}
+  .btn.sm{padding:5px 9px;font-size:11.5px;}
+  .btn.icon-btn{width:26px;height:26px;padding:0;font-size:13px;line-height:1;justify-content:center;flex-shrink:0;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+
+  input,select,textarea{
+    font-family:var(--font-body);font-size:13px;padding:8px 10px;border:1px solid var(--border-strong);
+    border-radius:var(--radius);background:#fff;color:var(--ink);width:100%;
+  }
+  input.mono,select.mono{font-family:var(--font-mono);}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-tint);}
+  label.field{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--ink-muted);font-weight:600;}
+  .field-row{display:grid;gap:12px;}
+  .grid-2{grid-template-columns:1fr 1fr;}
+  .grid-3{grid-template-columns:1fr 1fr 1fr;}
+  .grid-4{grid-template-columns:1fr 1fr 1fr 1fr;}
+
+  .scanbar{display:flex;gap:10px;align-items:center;background:var(--primary-tint);border:1px dashed var(--primary);border-radius:var(--radius);padding:10px 12px;margin-bottom:16px;}
+  .scanbar svg{width:18px;height:18px;color:var(--primary);flex-shrink:0;}
+  .scanbar input{border:none;background:transparent;font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--primary-dark);}
+  .scanbar input:focus{box-shadow:none;}
+  .scanbar .hint{font-size:11px;color:var(--primary);white-space:nowrap;}
+
+  .combo-wrap{position:relative;}
+  .combo-results{
+    display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;max-height:260px;overflow-y:auto;
+    background:#fff;border:1px solid var(--border-strong);border-radius:var(--radius);box-shadow:0 10px 24px rgba(15,23,32,.14);z-index:20;
+  }
+  .combo-results.open{display:block;}
+  .combo-item{padding:8px 12px;cursor:pointer;font-size:12.5px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;}
+  .combo-item:last-child{border-bottom:none;}
+  .combo-item:hover, .combo-item.active{background:var(--primary-tint);}
+  .combo-item .combo-code{font-family:var(--font-mono);font-weight:600;color:var(--primary-dark);}
+  .combo-item .combo-spec{color:var(--ink-muted);font-size:11.5px;}
+  .combo-empty{padding:10px 12px;font-size:12px;color:var(--ink-faint);}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead th{
+    text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-muted);
+    padding:10px 12px;border-bottom:2px solid var(--border);background:var(--surface-alt);white-space:nowrap;
+  }
+  thead th.sortable{cursor:pointer;user-select:none;}
+  thead th.sortable:hover{color:var(--primary-dark);}
+  .sort-arrow{display:inline-block;margin-left:3px;font-size:9px;color:var(--primary);width:8px;}
+  tbody td{padding:11px 12px;vertical-align:middle;line-height:1.5;}
+  tbody tr{border-bottom:1px solid var(--border);}
+  tbody tr:last-child{border-bottom:none;}
+  tbody tr:hover{background:var(--surface-alt);}
+  .mono-cell{font-family:var(--font-mono);white-space:nowrap;}
+  .table-wrap{overflow-x:auto;}
+  .empty-row td{text-align:center;color:var(--ink-faint);padding:30px;font-size:12.5px;}
+
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap;}
+  .badge.ok{background:var(--success-tint);color:var(--success);}
+  .badge.warn{background:var(--amber-tint);color:var(--amber);}
+  .badge.danger{background:var(--danger-tint);color:var(--danger);}
+  .badge.neutral{background:var(--surface-alt);color:var(--ink-muted);border:1px solid var(--border);}
+  .badge.info{background:var(--primary-tint);color:var(--primary-dark);}
+
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center;}
+  .filters input,.filters select{width:auto;min-width:130px;}
+  .filters .grow{flex:1;min-width:180px;}
+
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap;}
+  .toolbar-right{display:flex;gap:8px;flex-wrap:wrap;}
+
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(15,23,32,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:20px;
+  }
+  .modal-overlay.active{display:flex;}
+  .modal{background:#fff;border-radius:8px;width:100%;max-width:560px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.25);}
+  .modal-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;z-index:2;}
+  .modal-head h3{margin:0;font-family:var(--font-disp);font-size:15px;}
+  .modal-body{padding:20px;display:flex;flex-direction:column;gap:14px;}
+  .modal-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+  .close-x{background:none;border:none;font-size:18px;color:var(--ink-muted);line-height:1;padding:4px;}
+
+  .toast-wrap{position:fixed;bottom:22px;right:22px;display:flex;flex-direction:column;gap:8px;z-index:200;}
+  .toast{background:var(--ink);color:#fff;padding:11px 16px;border-radius:6px;font-size:12.5px;box-shadow:0 8px 20px rgba(0,0,0,.25);display:flex;align-items:center;gap:8px;animation:toastin .2s ease;}
+  .toast.success{background:var(--success);}
+  .toast.error{background:var(--danger);}
+  @keyframes toastin{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+  .calib-scale{position:relative;height:8px;background:var(--surface-alt);border-radius:4px;overflow:hidden;border:1px solid var(--border);}
+  .calib-scale-fill{position:absolute;top:0;left:0;bottom:0;border-radius:4px;}
+  .subtle-link{color:var(--primary);font-weight:600;cursor:pointer;font-size:12px;}
+  .subtle-link:hover{text-decoration:underline;}
+  .divider-line{height:1px;background:var(--border);margin:16px 0;}
+  .row-actions{display:flex;gap:4px;white-space:nowrap;align-items:center;}
+  th.col-actions{width:76px;}
+  .helptext{font-size:11.5px;color:var(--ink-faint);margin-top:3px;}
+  .kpi-inline{display:flex;gap:18px;flex-wrap:wrap;margin-top:4px;}
+  .kpi-inline .item{font-size:12px;color:var(--ink-muted);}
+  .kpi-inline b{color:var(--ink);font-family:var(--font-mono);}
+  @media (max-width:980px){
+    .cards{grid-template-columns:repeat(2,1fr);}
+    .sidebar{width:180px;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" width="22" height="22"><path d="M3 16.5 16.5 3l1.5 1.5L4.5 18l-1.5-1.5Z" stroke="#EAF1F6" stroke-width="1.6"/><path d="M5.8 13.7 8 15.9M8.7 11 10.9 13.2M11.6 8 13.8 10.2M14.5 5.1 16.7 7.3" stroke="#EAF1F6" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <div>
+          <div class="brand-title">계측기 수불대장</div>
+          <div class="brand-sub">GAUGE LEDGER SYSTEM</div>
+        </div>
+      </div>
+    </div>
+    <div class="nav" id="navList">
+      <div class="nav-item active" data-view="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        <span>대시보드</span>
+      </div>
+      <div class="nav-item" data-view="instruments">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5M8 14h3M8 17h6"/></svg>
+        <span>계측기 목록</span>
+      </div>
+      <div class="nav-item" data-view="loans">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 12h11M15 12l-3-3M15 12l-3 3"/><path d="M20 6v12"/></svg>
+        <span>대여/반납</span>
+        <span class="nav-badge" id="badgeLoans" style="display:none;"></span>
+      </div>
+      <div class="nav-item" data-view="calibration">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span>교정관리</span>
+        <span class="nav-badge danger" id="badgeCalib" style="display:none;"></span>
+      </div>
+      <div class="nav-item" data-view="history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5M12 7v5l4 2"/></svg>
+        <span>이력조회</span>
+      </div>
+      <div class="nav-item" data-view="data">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 18v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/></svg>
+        <span>데이터 관리</span>
+      </div>
+    </div>
+    <div class="sidebar-foot">LOCAL STORAGE · v1.0</div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="viewTitle">대시보드</div>
+      <div style="display:flex;align-items:center;gap:14px;">
+        <button class="btn sm" id="gasSyncBtn" onclick="syncGoogleSheet()" style="position:relative;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>
+          모바일신청 동기화
+          <span id="gasPendingBadge" class="nav-badge" style="display:none;position:absolute;top:-7px;right:-7px;"></span>
+        </button>
+        <div class="topbar-date" id="todayDate"></div>
+      </div>
+    </div>
+    <div class="content">
+
+      <!-- ===================== DASHBOARD ===================== -->
+      <div class="view active" id="view-dashboard">
+        <div class="cards">
+          <div class="card">
+            <div class="card-label">전체 계측기</div>
+            <div class="card-value" id="kpiTotal">0</div>
+            <div class="card-sub" id="kpiTotalSub">등록된 계측기 수</div>
+          </div>
+          <div class="card">
+            <div class="card-label">대여중</div>
+            <div class="card-value info" id="kpiLoaned">0</div>
+            <div class="card-sub" id="kpiLoanedSub">현재 대여중인 계측기</div>
+          </div>
+          <div class="card">
+            <div class="card-label">교정 임박 (D-30)</div>
+            <div class="card-value warn" id="kpiDue">0</div>
+            <div class="card-sub">30일 이내 교정 예정</div>
+          </div>
+          <div class="card">
+            <div class="card-label">교정 만료</div>
+            <div class="card-value danger" id="kpiOverdue">0</div>
+            <div class="card-sub">교정 기한 초과</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>⚠ 교정 임박 / 만료 계측기</h3><span class="subtle-link" onclick="showView('calibration')">교정관리 전체보기 →</span></div>
+          <div class="panel-body">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>관리번호</th><th>품명</th><th>규격/모델</th><th>차기교정일</th><th>상태</th><th>보관위치</th></tr></thead>
+                <tbody id="dashCalibTable"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>📤 현재 대여중인 계측기</h3><span class="subtle-link" onclick="showView('loans')">대여/반납 전체보기 →</span></div>
+          <div class="panel-body">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>관리번호</th><th>품명</th><th>규격/모델</th><th>대여자</th><th>세부내역</th><th>대여일</th><th>경과</th></tr></thead>
+                <tbody id="dashLoanTable"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== INSTRUMENTS ===================== -->
+      <div class="view" id="view-instruments">
+        <div class="section-head">
+          <h2 class="section-title">계측기 목록</h2>
+          <div class="section-desc">보유중인 모든 계측기의 기본 정보를 관리합니다.</div>
+        </div>
+
+        <div class="scanbar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5v14M8 5v14M11 5v14M15 5v14M17.5 5v14M21 5v14"/></svg>
+          <input type="text" id="instScanInput" placeholder="관리번호 스캔 또는 입력 후 Enter — 등록된 계측기면 상세정보로 이동, 없으면 신규등록 폼이 열립니다" class="mono">
+          <span class="hint">BARCODE READY</span>
+        </div>
+
+        <div class="toolbar">
+          <div class="filters">
+            <input type="text" id="instSearch" class="grow" placeholder="품명, 관리번호, 규격, 제조사 검색...">
+            <select id="instCatFilter"><option value="">전체 분류</option></select>
+            <select id="instManageFilter">
+              <option value="">전체 관리구분</option>
+              <option value="수불관리">수불관리</option>
+              <option value="현장배치">현장배치</option>
+            </select>
+            <select id="instStatusFilter">
+              <option value="">전체 상태</option>
+              <option value="보관중">보관중</option>
+              <option value="대여중">대여중</option>
+              <option value="배치완료">배치완료</option>
+              <option value="교정중">교정중</option>
+              <option value="수리중">수리중</option>
+              <option value="폐기">폐기</option>
+            </select>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn primary" onclick="openInstrumentModal()">+ 계측기 등록</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th class="sortable" onclick="setInstSort('code')">관리번호<span class="sort-arrow" id="sortArrow-code"></span></th>
+                  <th class="sortable" onclick="setInstSort('category')">분류<span class="sort-arrow" id="sortArrow-category"></span></th>
+                  <th class="sortable" onclick="setInstSort('name')">품명<span class="sort-arrow" id="sortArrow-name"></span></th>
+                  <th class="sortable" onclick="setInstSort('spec')">규격/모델<span class="sort-arrow" id="sortArrow-spec"></span></th>
+                  <th class="sortable" onclick="setInstSort('maker')">제조사<span class="sort-arrow" id="sortArrow-maker"></span></th>
+                  <th>고유번호</th>
+                  <th class="sortable" onclick="setInstSort('manageType')">관리구분<span class="sort-arrow" id="sortArrow-manageType"></span></th>
+                  <th class="sortable" onclick="setInstSort('location')">위치/담당<span class="sort-arrow" id="sortArrow-location"></span></th>
+                  <th class="sortable" onclick="setInstSort('cycle')">교정주기<span class="sort-arrow" id="sortArrow-cycle"></span></th>
+                  <th class="sortable" onclick="setInstSort('nextCalibDate')">차기교정일<span class="sort-arrow" id="sortArrow-nextCalibDate"></span></th>
+                  <th class="sortable" onclick="setInstSort('status')">상태<span class="sort-arrow" id="sortArrow-status"></span></th>
+                  <th class="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody id="instTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== LOANS ===================== -->
+      <div class="view" id="view-loans">
+        <div class="section-head">
+          <h2 class="section-title">대여 / 반납</h2>
+          <div class="section-desc">계측기 수불(대여·반납) 처리 및 현재 대여 현황입니다.</div>
+        </div>
+
+        <div class="scanbar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5v14M8 5v14M11 5v14M15 5v14M17.5 5v14M21 5v14"/></svg>
+          <input type="text" id="loanScanInput" placeholder="관리번호 스캔 또는 입력 후 Enter" class="mono">
+          <span class="hint">BARCODE READY</span>
+        </div>
+
+        <div class="cards" style="grid-template-columns:1fr 1fr;margin-bottom:18px;">
+          <div class="card" style="cursor:default;">
+            <div class="card-label">빠른 대여 처리</div>
+            <div class="field-row" style="margin-top:10px;">
+              <label class="field">계측기
+                <div class="combo-wrap">
+                  <input type="text" id="loanOutInstSearch" class="mono" autocomplete="off" placeholder="관리번호 또는 계측기명으로 검색" oninput="onComboInput('loanOut')" onfocus="onComboFocus('loanOut')">
+                  <input type="hidden" id="loanOutInst" value="">
+                  <div class="combo-results" id="loanOutInstResults"></div>
+                </div>
+              </label>
+              <div class="helptext" id="loanOutSpec" style="margin-top:-6px;"></div>
+              <label class="field">대여자<input type="text" id="loanOutPerson" placeholder="이름 / 부서"></label>
+              <label class="field">사용 세부내역 <span style="font-weight:400;color:var(--ink-faint);">(세트 계측기의 경우 실제 사용한 구성품)</span>
+                <input type="text" id="loanOutDetail" placeholder="예: 10mm, 25mm, 40mm 블록 사용">
+              </label>
+              <div class="field-row grid-2">
+                <label class="field">대여일<input type="date" id="loanOutDate"></label>
+              </div>
+              <button class="btn primary" onclick="processLoanOut()">대여 처리</button>
+            </div>
+          </div>
+          <div class="card" style="cursor:default;">
+            <div class="card-label">빠른 반납 처리</div>
+            <div class="field-row" style="margin-top:10px;">
+              <label class="field">대여중인 계측기
+                <div class="combo-wrap">
+                  <input type="text" id="loanInInstSearch" class="mono" autocomplete="off" placeholder="관리번호 또는 계측기명으로 검색" oninput="onComboInput('loanIn')" onfocus="onComboFocus('loanIn')">
+                  <input type="hidden" id="loanInInst" value="">
+                  <div class="combo-results" id="loanInInstResults"></div>
+                </div>
+              </label>
+              <div class="helptext" id="loanInSpec" style="margin-top:-6px;"></div>
+              <label class="field">비고<input type="text" id="loanInNote" placeholder="선택 입력"></label>
+              <label class="field">반납일<input type="date" id="loanInDate"></label>
+              <button class="btn primary" onclick="processLoanIn()">반납 처리</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>현재 대여중 목록</h3></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>관리번호</th><th>품명</th><th>규격/모델</th><th>대여자</th><th>세부내역</th><th>대여일</th><th>경과</th><th></th></tr></thead>
+              <tbody id="loanActiveTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== CALIBRATION ===================== -->
+      <div class="view" id="view-calibration">
+        <div class="section-head">
+          <h2 class="section-title">교정관리</h2>
+          <div class="section-desc">계측기별 교정 주기와 상태를 관리하고, 신규 교정 이력을 등록합니다.</div>
+        </div>
+
+        <div class="filters">
+          <select id="calibStatusFilter">
+            <option value="">전체 상태</option>
+            <option value="ok">정상</option>
+            <option value="warn">임박(D-30)</option>
+            <option value="danger">만료</option>
+            <option value="none">교정이력 없음</option>
+          </select>
+          <select id="calibCatFilter"><option value="">전체 분류</option></select>
+        </div>
+
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>관리번호</th><th>품명</th><th>규격/모델</th><th>교정구분</th><th>교정주기</th><th>최근교정일</th><th>차기교정일</th><th>진행</th><th>상태</th><th></th></tr></thead>
+              <tbody id="calibTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>교정 이력</h3></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>등록일</th><th>관리번호</th><th>품명</th><th>교정일</th><th>차기예정일</th><th>결과</th><th>성적서번호</th><th>교정기관</th><th>비고</th></tr></thead>
+              <tbody id="calibHistTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== HISTORY ===================== -->
+      <div class="view" id="view-history">
+        <div class="section-head">
+          <h2 class="section-title">이력조회</h2>
+          <div class="section-desc">대여/반납 및 교정 이력을 통합 조회합니다.</div>
+        </div>
+        <div class="filters">
+          <input type="text" id="histSearch" class="grow" placeholder="관리번호, 품명, 담당자 검색...">
+          <select id="histTypeFilter">
+            <option value="">전체 유형</option>
+            <option value="대여">대여</option>
+            <option value="반납">반납</option>
+            <option value="교정">교정</option>
+          </select>
+          <input type="date" id="histFrom">
+          <span style="color:var(--ink-faint);font-size:12px;">~</span>
+          <input type="date" id="histTo">
+          <button class="btn sm" onclick="exportHistoryExcel()">엑셀로 내보내기</button>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>일시</th><th>유형</th><th>관리번호</th><th>품명</th><th>규격/모델</th><th>담당자/기관</th><th>세부내용</th><th class="col-actions"></th></tr></thead>
+              <tbody id="historyTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== DATA MANAGEMENT ===================== -->
+      <div class="view" id="view-data">
+        <div class="section-head">
+          <h2 class="section-title">데이터 관리</h2>
+          <div class="section-desc">엑셀 가져오기/내보내기, 분류 설정, 백업/복원을 관리합니다.</div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>구글시트 연동 (모바일 QR 대여/반납)</h3></div>
+          <div class="panel-body">
+            <p class="helptext">작업자가 모바일 폼(QR)으로 신청한 대여/반납을 이 관리자 화면으로 가져오고, 현재 계측기 목록/상태를 모바일 폼 쪽으로 내보냅니다. Apps Script 웹앱 배포 후 URL과 토큰을 아래에 입력하세요.</p>
+            <div class="field-row grid-2" style="max-width:640px;margin-top:10px;">
+              <label class="field">Apps Script 웹앱 URL<input type="text" id="gasUrlInput" placeholder="https://script.google.com/macros/s/.../exec"></label>
+              <label class="field">토큰<input type="text" id="gasTokenInput" class="mono" placeholder="Code.gs의 TOKEN 값과 동일하게"></label>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+              <button class="btn primary sm" onclick="saveGasConfig()">설정 저장</button>
+              <button class="btn sm" onclick="syncGoogleSheet()">지금 동기화</button>
+              <button class="btn ghost sm" onclick="pushListToSheet(true)">계측기 목록만 다시 내보내기</button>
+              <span class="helptext" id="gasLastSync" style="margin-top:0;">아직 동기화한 적 없음</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>엑셀 내보내기</h3></div>
+          <div class="panel-body">
+            <p class="helptext">계측기 목록 · 대여이력 · 교정이력을 시트별로 담은 엑셀 파일을 내려받습니다.</p>
+            <button class="btn primary" onclick="exportFullExcel()">전체 백업 엑셀 내보내기</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>엑셀로 계측기 일괄 등록</h3></div>
+          <div class="panel-body">
+            <p class="helptext">엑셀 열 순서: 관리번호 · 분류 · 품명 · 규격/모델 · 제조사 · Model No. · Code No. · 고유번호 · 위치/담당자 · 관리구분(수불관리/현장배치) · 교정구분(공인교정/자체점검) · 구매일(YYYY-MM-DD) · 교정주기(개월) · 최근교정일(YYYY-MM-DD) · 차기교정일(비워두면 자동계산) · 성적서번호 · 상태 · 비고 &nbsp;(1행은 머리글로 취급되어 건너뜁니다. '전체 백업 엑셀 내보내기'로 받은 파일과 동일한 형식입니다.)</p>
+            <input type="file" id="importFile" accept=".xlsx,.xls,.csv" style="max-width:340px;">
+            <button class="btn primary" style="margin-top:10px;" onclick="importInstrumentsExcel()">가져오기 실행</button>
+            <div id="importResult" class="helptext" style="margin-top:8px;"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>분류(카테고리) 관리</h3></div>
+          <div class="panel-body">
+            <div class="table-wrap" style="margin-bottom:14px;">
+              <table>
+                <thead><tr><th>분류명</th><th>등록 계측기 수</th><th></th></tr></thead>
+                <tbody id="categoryTable"></tbody>
+              </table>
+            </div>
+            <div class="field-row grid-2" style="max-width:500px;">
+              <label class="field">분류명<input type="text" id="newCatName" placeholder="예: 초음파두께계"></label>
+              <label class="field">&nbsp;<button class="btn primary" onclick="addCategory()">분류 추가</button></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>초기화</h3></div>
+          <div class="panel-body">
+            <p class="helptext">모든 데이터(계측기, 대여이력, 교정이력)를 삭제합니다. 이 작업은 되돌릴 수 없습니다. 실행 전 반드시 백업 엑셀을 내려받으세요.</p>
+            <button class="btn danger" onclick="resetAllData()">전체 데이터 초기화</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Instrument Modal -->
+<div class="modal-overlay" id="instModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="instModalTitle">계측기 등록</h3>
+      <button class="close-x" onclick="closeModal('instModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="instId">
+      <div class="field-row grid-2">
+        <label class="field">분류
+          <select id="instCategory" onchange="suggestInstCode()"></select>
+        </label>
+        <label class="field">관리번호
+          <input type="text" id="instCode" class="mono" placeholder="예: DD-QI-114 (자동 제안됨, 수정 가능)">
+        </label>
+      </div>
+      <label class="field">품명<input type="text" id="instName" placeholder="예: 디지털 캘리퍼스"></label>
+      <div class="field-row grid-2">
+        <label class="field">규격/모델<input type="text" id="instSpec" placeholder="예: 0-150mm / CD-15APX"></label>
+        <label class="field">제조사<input type="text" id="instMaker" placeholder="예: Mitutoyo"></label>
+      </div>
+      <div class="field-row grid-2">
+        <label class="field">Code No.<input type="text" id="instCodeNo" class="mono" placeholder="선택 입력"></label>
+        <label class="field">Model No.<input type="text" id="instModelNo" class="mono" placeholder="선택 입력"></label>
+      </div>
+      <div class="field-row grid-2">
+        <label class="field">고유번호(Serial No.)<input type="text" id="instSerial" class="mono" placeholder="예: B21079678"></label>
+        <label class="field">구매일<input type="date" id="instPurchase"></label>
+      </div>
+      <div class="divider-line"></div>
+      <div class="field-row grid-2">
+        <label class="field">관리구분
+          <select id="instManageType" onchange="onManageTypeChange()">
+            <option value="수불관리">수불관리 (품질보관 · 대여/반납 대상)</option>
+            <option value="현장배치">현장/개인배치 (상시 보관, 대여 대상 아님)</option>
+          </select>
+        </label>
+        <label class="field">보관위치 / 담당자<input type="text" id="instLocation" placeholder="수불관리: 보관위치 · 현장배치: 담당자/설비명"></label>
+      </div>
+      <div class="divider-line"></div>
+      <div class="field-row grid-3">
+        <label class="field">교정주기(개월)<input type="number" id="instCycle" min="0" value="12"></label>
+        <label class="field">최근교정일<input type="date" id="instLastCalib"></label>
+        <label class="field">성적서번호<input type="text" id="instCert" class="mono" placeholder="선택 입력"></label>
+      </div>
+      <div class="field-row grid-2">
+        <label class="field">교정구분
+          <select id="instCalibType">
+            <option value="공인교정">공인교정 (외부 인증기관)</option>
+            <option value="자체점검">자체점검 (사내 확인)</option>
+          </select>
+        </label>
+        <label class="field">상태
+          <select id="instStatus">
+            <option value="보관중">보관중</option>
+            <option value="대여중">대여중</option>
+            <option value="배치완료">배치완료 (현장/개인 상시보관)</option>
+            <option value="교정중">교정중</option>
+            <option value="수리중">수리중</option>
+            <option value="폐기">폐기</option>
+          </select>
+        </label>
+      </div>
+      <label class="field">비고<textarea id="instNote" rows="2" placeholder="특이사항, 파손/수리 이력, 주의사항 등 자유롭게 입력"></textarea></label>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" onclick="closeModal('instModal')">취소</button>
+      <button class="btn primary" onclick="saveInstrument()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Calibration Register Modal -->
+<div class="modal-overlay" id="calibModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="calibModalTitle">교정 이력 등록</h3>
+      <button class="close-x" onclick="closeModal('calibModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="calibInstId">
+      <input type="hidden" id="calibEditId">
+      <div class="card" style="background:var(--surface-alt);">
+        <div class="card-label">대상 계측기</div>
+        <div id="calibTargetLabel" style="font-family:var(--font-mono);font-weight:600;margin-top:4px;"></div>
+      </div>
+      <div class="field-row grid-2">
+        <label class="field">교정일<input type="date" id="calibDate"></label>
+        <label class="field">교정주기(개월)<input type="number" id="calibCycleInput" min="0"></label>
+      </div>
+      <label class="field">차기예정일 (자동계산, 수정 가능)<input type="date" id="calibNextDate"></label>
+      <div class="field-row grid-2">
+        <label class="field">결과
+          <select id="calibResult">
+            <option value="합격">합격</option>
+            <option value="불합격">불합격</option>
+            <option value="조건부합격">조건부합격</option>
+          </select>
+        </label>
+        <label class="field">성적서번호<input type="text" id="calibCertNo" class="mono"></label>
+      </div>
+      <label class="field">교정기관<input type="text" id="calibAgency" placeholder="예: 사내 자체교정 / OO계량계측"></label>
+      <label class="field">비고<textarea id="calibNote" rows="2"></textarea></label>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" onclick="closeModal('calibModal')">취소</button>
+      <button class="btn primary" id="calibSaveBtn" onclick="saveCalibration()">교정 등록</button>
+    </div>
+  </div>
+</div>
+
+<!-- Transaction (대여/반납) Edit Modal -->
+<div class="modal-overlay" id="txEditModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>대여/반납 이력 수정</h3>
+      <button class="close-x" onclick="closeModal('txEditModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="txEditId">
+      <div class="card" style="background:var(--surface-alt);">
+        <div class="card-label">대상 계측기</div>
+        <div id="txEditTargetLabel" style="font-family:var(--font-mono);font-weight:600;margin-top:4px;"></div>
+      </div>
+      <div class="field-row grid-2">
+        <label class="field">유형
+          <select id="txEditType" onchange="onTxEditTypeChange()">
+            <option value="대여">대여</option>
+            <option value="반납">반납</option>
+          </select>
+        </label>
+        <label class="field">일자<input type="date" id="txEditDate"></label>
+      </div>
+      <label class="field" id="txEditPersonWrap">대여자<input type="text" id="txEditPerson" placeholder="이름 / 부서"></label>
+      <label class="field">세부내용/비고<input type="text" id="txEditNote"></label>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" onclick="closeModal('txEditModal')">취소</button>
+      <button class="btn primary" onclick="saveTxEdit()">저장</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+/* ============================================================
+   데이터 저장/로드
+   ============================================================ */
+const DB_KEYS = { inst:'gauge_instruments', tx:'gauge_transactions', calib:'gauge_calibrations', cat:'gauge_categories', seq:'gauge_seq' };
+
+const DEFAULT_CATEGORIES = [
+  {name:'캘리퍼스', prefix:'CAL'},
+  {name:'마이크로미터', prefix:'MIC'},
+  {name:'하이트게이지', prefix:'HGT'},
+  {name:'다이얼게이지', prefix:'DIA'},
+  {name:'게이지블록', prefix:'GBK'},
+  {name:'플러그/링게이지', prefix:'PRG'},
+  {name:'핀게이지', prefix:'PIN'},
+  {name:'나사피치게이지', prefix:'TPG'},
+  {name:'두께게이지', prefix:'THK'},
+  {name:'보어게이지', prefix:'BOR'},
+  {name:'R게이지', prefix:'RGA'},
+  {name:'경도기', prefix:'HRD'},
+  {name:'토크렌치', prefix:'TRQ'},
+  {name:'압력게이지', prefix:'PRS'},
+  {name:'온도계', prefix:'TMP'},
+  {name:'저울', prefix:'SCL'},
+  {name:'각도게이지', prefix:'ANG'},
+  {name:'표면거칠기측정기', prefix:'SRF'},
+  {name:'좌표측정기(CMM)', prefix:'CMM'},
+  {name:'정밀정반', prefix:'PLT'},
+  {name:'PI테이프', prefix:'PIT'},
+  {name:'깊이게이지', prefix:'DEP'},
+  {name:'홀테스트', prefix:'HOL'},
+  {name:'기타', prefix:'ETC'}
+];
+
+function loadDB(key, fallback){
+  try{
+    const raw = localStorage.getItem(key);
+    if(!raw) return fallback;
+    return JSON.parse(raw);
+  }catch(e){ return fallback; }
+}
+function saveDB(key, val){
+  try{ localStorage.setItem(key, JSON.stringify(val)); return true; }
+  catch(e){ toast('저장 중 오류가 발생했습니다.', 'error'); return false; }
+}
+
+let instruments = loadDB(DB_KEYS.inst, []);
+let transactions = loadDB(DB_KEYS.tx, []);
+let calibrations = loadDB(DB_KEYS.calib, []);
+let categories = loadDB(DB_KEYS.cat, DEFAULT_CATEGORIES);
+
+function persistAll(){
+  saveDB(DB_KEYS.inst, instruments);
+  saveDB(DB_KEYS.tx, transactions);
+  saveDB(DB_KEYS.calib, calibrations);
+  saveDB(DB_KEYS.cat, categories);
+}
+
+function uid(){ return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+/* 관리번호를 숫자 기준 자연정렬 (DD-QI-2 < DD-QI-10 < DD-QI-77-1 < DD-QI-77-2) */
+function naturalCodeCompare(a, b){
+  a = a || ''; b = b || '';
+  const re = /(\d+)|(\D+)/g;
+  const ax = a.match(re) || [];
+  const bx = b.match(re) || [];
+  const len = Math.max(ax.length, bx.length);
+  for(let i=0;i<len;i++){
+    const av = ax[i], bv = bx[i];
+    if(av===undefined) return -1;
+    if(bv===undefined) return 1;
+    const an = /^\d+$/.test(av), bn = /^\d+$/.test(bv);
+    if(an && bn){
+      const diff = parseInt(av,10) - parseInt(bv,10);
+      if(diff!==0) return diff;
+    } else {
+      const cmp = av.localeCompare(bv);
+      if(cmp!==0) return cmp;
+    }
+  }
+  return 0;
+}
+
+/* 규격/모델처럼 소수점이 포함된 값(Φ12.01, 0~200mm 등)을 숫자 기준으로 자연정렬 */
+function naturalSpecCompare(a, b){
+  a = a || ''; b = b || '';
+  const re = /(\d+(?:\.\d+)?)|(\D+)/g;
+  const ax = a.match(re) || [];
+  const bx = b.match(re) || [];
+  const len = Math.max(ax.length, bx.length);
+  for(let i=0;i<len;i++){
+    const av = ax[i], bv = bx[i];
+    if(av===undefined) return -1;
+    if(bv===undefined) return 1;
+    const an = /^\d+(?:\.\d+)?$/.test(av), bn = /^\d+(?:\.\d+)?$/.test(bv);
+    if(an && bn){
+      const diff = parseFloat(av) - parseFloat(bv);
+      if(diff!==0) return diff;
+    } else {
+      const cmp = av.localeCompare(bv);
+      if(cmp!==0) return cmp;
+    }
+  }
+  return 0;
+}
+
+/* ============================================================
+   유틸
+   ============================================================ */
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function fmtDate(d){ if(!d) return '-'; return d; }
+function daysBetween(a,b){
+  const d1 = new Date(a), d2 = new Date(b);
+  return Math.round((d2-d1)/(1000*60*60*24));
+}
+function addMonths(dateStr, months){
+  if(!dateStr) return '';
+  const d = new Date(dateStr+'T00:00:00');
+  d.setMonth(d.getMonth() + Number(months||0));
+  return d.toISOString().slice(0,10);
+}
+function toast(msg, type){
+  const wrap = document.getElementById('toastWrap');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' '+type : '');
+  el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, 2600);
+}
+function escapeHtml(s){
+  if(s===undefined||s===null) return '';
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ============================================================
+   네비게이션
+   ============================================================ */
+const viewTitles = {
+  dashboard:'대시보드', instruments:'계측기 목록', loans:'대여 / 반납',
+  calibration:'교정관리', history:'이력조회', data:'데이터 관리'
+};
+function showView(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===name));
+  document.getElementById('viewTitle').textContent = viewTitles[name];
+  renderAll();
+  if(name==='instruments') setTimeout(()=>document.getElementById('instScanInput').focus(), 60);
+  if(name==='loans') setTimeout(()=>document.getElementById('loanScanInput').focus(), 60);
+}
+document.querySelectorAll('.nav-item').forEach(item=>{
+  item.addEventListener('click', ()=>showView(item.dataset.view));
+});
+
+function closeModal(id){ document.getElementById(id).classList.remove('active'); }
+function openModal(id){ document.getElementById(id).classList.add('active'); }
+
+/* ============================================================
+   계측기 상태 계산 (교정)
+   ============================================================ */
+function calibStatusOf(inst){
+  if(!inst.lastCalibDate || !inst.nextCalibDate) return {level:'none', label:'이력없음', days:null};
+  const d = daysBetween(todayStr(), inst.nextCalibDate);
+  if(d < 0) return {level:'danger', label:'만료 (D+'+Math.abs(d)+')', days:d};
+  if(d <= 30) return {level:'warn', label:'임박 (D-'+d+')', days:d};
+  return {level:'ok', label:'정상 (D-'+d+')', days:d};
+}
+function badgeHtmlForCalib(inst){
+  const s = calibStatusOf(inst);
+  const map = {ok:'ok', warn:'warn', danger:'danger', none:'neutral'};
+  return `<span class="badge ${map[s.level]}">${s.label}</span>`;
+}
+function statusBadge(status){
+  const map = {'보관중':'neutral','대여중':'info','배치완료':'ok','교정중':'warn','수리중':'warn','폐기':'danger'};
+  return `<span class="badge ${map[status]||'neutral'}">${escapeHtml(status)}</span>`;
+}
+function manageTypeBadge(manageType){
+  return manageType==='수불관리'
+    ? `<span class="badge info">수불관리</span>`
+    : `<span class="badge neutral">현장배치</span>`;
+}
+
+/* ============================================================
+   분류(카테고리)
+   ============================================================ */
+function populateCategorySelects(){
+  const selects = ['instCategory','instCatFilter','calibCatFilter'];
+  selects.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    const cur = el.value;
+    const isFilter = id.includes('Filter');
+    el.innerHTML = (isFilter ? '<option value="">전체 분류</option>' : '') +
+      categories.map(c=>`<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+    if(cur) el.value = cur;
+  });
+}
+function addCategory(){
+  const name = document.getElementById('newCatName').value.trim();
+  if(!name){ toast('분류명을 입력하세요.', 'error'); return; }
+  if(categories.some(c=>c.name===name)){ toast('이미 존재하는 분류입니다.', 'error'); return; }
+  categories.push({name, prefix: MASTER_CODE_PREFIX});
+  saveDB(DB_KEYS.cat, categories);
+  document.getElementById('newCatName').value='';
+  populateCategorySelects();
+  renderCategoryTable();
+  toast('분류가 추가되었습니다.', 'success');
+}
+function deleteCategory(name){
+  const inUse = instruments.some(i=>i.category===name);
+  if(inUse){ toast('해당 분류를 사용중인 계측기가 있어 삭제할 수 없습니다.', 'error'); return; }
+  if(!confirm(`'${name}' 분류를 삭제할까요?`)) return;
+  categories = categories.filter(c=>c.name!==name);
+  saveDB(DB_KEYS.cat, categories);
+  populateCategorySelects();
+  renderCategoryTable();
+}
+function renderCategoryTable(){
+  const tbody = document.getElementById('categoryTable');
+  if(!tbody) return;
+  tbody.innerHTML = categories.map(c=>{
+    const count = instruments.filter(i=>i.category===c.name).length;
+    return `<tr>
+      <td>${escapeHtml(c.name)}</td>
+      <td class="mono-cell">${count}</td>
+      <td><button class="btn sm ghost" onclick="deleteCategory('${escapeHtml(c.name)}')">삭제</button></td>
+    </tr>`;
+  }).join('') || `<tr class="empty-row"><td colspan="3">등록된 분류가 없습니다.</td></tr>`;
+}
+
+const MASTER_CODE_PREFIX = 'DD-QI';
+function suggestInstCode(){
+  const codeField = document.getElementById('instCode');
+  if(codeField.value && codeField.dataset.userEdited==='1') return;
+  const re = new RegExp('^'+MASTER_CODE_PREFIX+'-(\\d+)');
+  const existingNums = instruments
+    .map(i=>{ const m = (i.code||'').match(re); return m ? parseInt(m[1],10) : NaN; })
+    .filter(n=>!isNaN(n));
+  const next = (existingNums.length ? Math.max(...existingNums) : 0) + 1;
+  codeField.value = MASTER_CODE_PREFIX + '-' + String(next).padStart(2,'0');
+  codeField.dataset.userEdited = '0';
+}
+
+/* ============================================================
+   계측기 CRUD
+   ============================================================ */
+function openInstrumentModal(inst){
+  document.getElementById('instModalTitle').textContent = inst ? '계측기 수정' : '계측기 등록';
+  document.getElementById('instId').value = inst ? inst.id : '';
+  document.getElementById('instCategory').value = inst ? inst.category : (categories[0] ? categories[0].name : '');
+  document.getElementById('instCode').value = inst ? inst.code : '';
+  document.getElementById('instCode').dataset.userEdited = inst ? '1' : '0';
+  document.getElementById('instName').value = inst ? inst.name : '';
+  document.getElementById('instSpec').value = inst ? inst.spec : '';
+  document.getElementById('instMaker').value = inst ? inst.maker : '';
+  document.getElementById('instSerial').value = inst ? (inst.serial||'') : '';
+  document.getElementById('instCodeNo').value = inst ? (inst.codeNo||'') : '';
+  document.getElementById('instModelNo').value = inst ? (inst.modelNo||'') : '';
+  document.getElementById('instManageType').value = inst ? (inst.manageType||'수불관리') : '수불관리';
+  document.getElementById('instLocation').value = inst ? inst.location : '';
+  document.getElementById('instPurchase').value = inst ? inst.purchaseDate||'' : '';
+  document.getElementById('instCycle').value = inst ? inst.cycle : 12;
+  document.getElementById('instLastCalib').value = inst ? inst.lastCalibDate||'' : '';
+  document.getElementById('instCert').value = inst ? inst.certNo||'' : '';
+  document.getElementById('instCalibType').value = inst ? (inst.calibType||'공인교정') : '공인교정';
+  document.getElementById('instStatus').value = inst ? inst.status : '보관중';
+  document.getElementById('instNote').value = inst ? (inst.note||'') : '';
+  if(!inst) suggestInstCode();
+  openModal('instModal');
+}
+document.getElementById('instCode').addEventListener('input', function(){ this.dataset.userEdited='1'; });
+function onManageTypeChange(){
+  const mt = document.getElementById('instManageType').value;
+  const statusSel = document.getElementById('instStatus');
+  // 신규 등록/수정 중 관리구분을 바꾸면 상태를 자연스러운 기본값으로 맞춰준다 (필요시 수동으로 다시 변경 가능)
+  if(mt==='현장배치' && (statusSel.value==='보관중' || statusSel.value==='대여중')) statusSel.value = '배치완료';
+  if(mt==='수불관리' && statusSel.value==='배치완료') statusSel.value = '보관중';
+}
+
+function saveInstrument(){
+  const id = document.getElementById('instId').value;
+  const code = document.getElementById('instCode').value.trim();
+  const name = document.getElementById('instName').value.trim();
+  const category = document.getElementById('instCategory').value;
+  if(!code || !name || !category){ toast('분류, 관리번호, 품명은 필수입니다.', 'error'); return; }
+  const dupe = instruments.find(i=>i.code===code && i.id!==id);
+  if(dupe){ toast('이미 사용중인 관리번호입니다.', 'error'); return; }
+
+  const lastCalibDate = document.getElementById('instLastCalib').value;
+  const cycle = Number(document.getElementById('instCycle').value)||0;
+  const nextCalibDate = lastCalibDate ? addMonths(lastCalibDate, cycle) : '';
+
+  const data = {
+    id: id || uid(),
+    code, name, category,
+    spec: document.getElementById('instSpec').value.trim(),
+    maker: document.getElementById('instMaker').value.trim(),
+    serial: document.getElementById('instSerial').value.trim(),
+    codeNo: document.getElementById('instCodeNo').value.trim(),
+    modelNo: document.getElementById('instModelNo').value.trim(),
+    manageType: document.getElementById('instManageType').value,
+    location: document.getElementById('instLocation').value.trim(),
+    purchaseDate: document.getElementById('instPurchase').value,
+    cycle, lastCalibDate, nextCalibDate,
+    certNo: document.getElementById('instCert').value.trim(),
+    calibType: document.getElementById('instCalibType').value,
+    status: document.getElementById('instStatus').value,
+    note: document.getElementById('instNote').value.trim(),
+    createdAt: id ? (instruments.find(i=>i.id===id)||{}).createdAt || new Date().toISOString() : new Date().toISOString()
+  };
+
+  if(id){
+    const idx = instruments.findIndex(i=>i.id===id);
+    instruments[idx] = data;
+    toast('계측기 정보가 수정되었습니다.', 'success');
+  } else {
+    instruments.push(data);
+    toast('계측기가 등록되었습니다.', 'success');
+  }
+  saveDB(DB_KEYS.inst, instruments);
+  closeModal('instModal');
+  renderAll();
+}
+function deleteInstrument(id){
+  const inst = instruments.find(i=>i.id===id);
+  if(!inst) return;
+  if(inst.status==='대여중'){ toast('대여중인 계측기는 삭제할 수 없습니다. 먼저 반납 처리하세요.', 'error'); return; }
+  if(!confirm(`'${inst.name}' (${inst.code})을(를) 삭제할까요? 관련 이력도 함께 삭제됩니다.`)) return;
+  instruments = instruments.filter(i=>i.id!==id);
+  transactions = transactions.filter(t=>t.instId!==id);
+  calibrations = calibrations.filter(c=>c.instId!==id);
+  persistAll();
+  renderAll();
+  toast('삭제되었습니다.', 'success');
+}
+
+let instSortKey = 'code';
+let instSortDir = 1; // 1 = 오름차순, -1 = 내림차순
+
+function setInstSort(key){
+  if(instSortKey===key){ instSortDir *= -1; }
+  else { instSortKey = key; instSortDir = 1; }
+  renderInstrumentTable();
+}
+function updateSortArrows(){
+  ['code','category','name','spec','maker','manageType','location','cycle','nextCalibDate','status'].forEach(k=>{
+    const el = document.getElementById('sortArrow-'+k);
+    if(!el) return;
+    el.textContent = (k===instSortKey) ? (instSortDir===1 ? '▲' : '▼') : '';
+  });
+}
+function compareInstruments(a, b, key){
+  if(key==='code') return naturalCodeCompare(a.code, b.code);
+  if(key==='spec') return naturalSpecCompare(a.spec, b.spec);
+  if(key==='cycle') return (a.cycle||0) - (b.cycle||0);
+  if(key==='nextCalibDate'){
+    const av = a.nextCalibDate || '9999-99-99';
+    const bv = b.nextCalibDate || '9999-99-99';
+    return av.localeCompare(bv);
+  }
+  const av = (a[key]||'').toString();
+  const bv = (b[key]||'').toString();
+  return av.localeCompare(bv, 'ko');
+}
+function renderInstrumentTable(){
+  const tbody = document.getElementById('instTable');
+  const search = (document.getElementById('instSearch').value||'').toLowerCase();
+  const catF = document.getElementById('instCatFilter').value;
+  const manageF = document.getElementById('instManageFilter').value;
+  const statusF = document.getElementById('instStatusFilter').value;
+
+  let rows = instruments.filter(i=>{
+    if(catF && i.category!==catF) return false;
+    if(manageF && i.manageType!==manageF) return false;
+    if(statusF && i.status!==statusF) return false;
+    if(search){
+      const hay = [i.code,i.name,i.spec,i.maker,i.serial,i.location,i.note,i.codeNo,i.modelNo].join(' ').toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  }).sort((a,b)=> compareInstruments(a,b,instSortKey) * instSortDir);
+
+  updateSortArrows();
+
+  tbody.innerHTML = rows.map(i=>`
+    <tr>
+      <td class="mono-cell">${escapeHtml(i.code)}</td>
+      <td>${escapeHtml(i.category)}</td>
+      <td>${escapeHtml(i.name)}${i.note ? ` <span title="${escapeHtml(i.note)}" style="cursor:help;color:var(--amber);">📝</span>` : ''}</td>
+      <td>${escapeHtml(i.spec||'-')}</td>
+      <td>${escapeHtml(i.maker||'-')}</td>
+      <td class="mono-cell">${escapeHtml(i.serial||'-')}</td>
+      <td>${manageTypeBadge(i.manageType||'수불관리')}</td>
+      <td>${escapeHtml(i.location||'-')}</td>
+      <td class="mono-cell">${i.cycle?i.cycle+'개월':'-'}</td>
+      <td class="mono-cell">${fmtDate(i.nextCalibDate)||'-'}</td>
+      <td>${statusBadge(i.status)}</td>
+      <td class="row-actions">
+        <button class="btn sm ghost icon-btn" title="수정" onclick='openInstrumentModal(${JSON.stringify(i).replace(/'/g,"&#39;")})'>✏️</button>
+        <button class="btn sm ghost icon-btn" title="삭제" onclick="deleteInstrument('${i.id}')">🗑️</button>
+      </td>
+    </tr>
+  `).join('') || `<tr class="empty-row"><td colspan="12">등록된 계측기가 없습니다. 우측 상단의 '+ 계측기 등록' 버튼을 눌러 추가하세요.</td></tr>`;
+}
+
+function handleInstScan(){
+  const input = document.getElementById('instScanInput');
+  input.addEventListener('keydown', e=>{
+    if(e.key!=='Enter') return;
+    const code = input.value.trim();
+    if(!code) return;
+    const found = instruments.find(i=>i.code.toLowerCase()===code.toLowerCase());
+    if(found){
+      openInstrumentModal(found);
+    } else {
+      openInstrumentModal();
+      document.getElementById('instCode').value = code;
+      document.getElementById('instCode').dataset.userEdited='1';
+      toast('등록되지 않은 관리번호입니다. 신규 등록을 진행하세요.');
+    }
+    input.value='';
+  });
+}
+
+/* ============================================================
+   대여 / 반납
+   ============================================================ */
+let loanComboOptions = { loanOut: [], loanIn: [] };
+
+function populateLoanSelects(){
+  loanComboOptions.loanOut = instruments.filter(i=>i.manageType==='수불관리' && i.status!=='대여중' && i.status!=='폐기');
+  loanComboOptions.loanIn = instruments.filter(i=>i.manageType==='수불관리' && i.status==='대여중');
+
+  ['loanOut','loanIn'].forEach(prefix=>{
+    const hidden = document.getElementById(prefix+'Inst');
+    const stillValid = loanComboOptions[prefix].some(i=>i.id===hidden.value);
+    if(!stillValid){
+      hidden.value = '';
+      document.getElementById(prefix+'InstSearch').value = '';
+    }
+    hideCombo(prefix);
+    updateLoanSpecDisplay(prefix+'Inst','loanOut'===prefix?'loanOutSpec':'loanInSpec');
+  });
+}
+
+function comboOptionLabel(i){ return `${i.code} · ${i.name}${i.spec ? ' (' + i.spec + ')' : ''}`; }
+
+function renderComboResults(prefix, filterText){
+  const listEl = document.getElementById(prefix+'InstResults');
+  const q = (filterText||'').trim().toLowerCase();
+  const options = loanComboOptions[prefix] || [];
+  const filtered = q ? options.filter(i => (i.code+' '+i.name+' '+(i.spec||'')).toLowerCase().includes(q)) : options;
+  if(!options.length){
+    listEl.innerHTML = `<div class="combo-empty">${prefix==='loanOut'?'대여 가능한 계측기가 없습니다.':'대여중인 계측기가 없습니다.'}</div>`;
+  } else if(!filtered.length){
+    listEl.innerHTML = `<div class="combo-empty">검색 결과가 없습니다.</div>`;
+  } else {
+    listEl.innerHTML = filtered.map(i=>`
+      <div class="combo-item" onmousedown="event.preventDefault();selectLoanInstrument('${prefix}','${i.id}')">
+        <span class="combo-code">${escapeHtml(i.code)}</span>
+        <span>${escapeHtml(i.name)}</span>
+        ${i.spec ? `<span class="combo-spec">${escapeHtml(i.spec)}</span>` : ''}
+      </div>
+    `).join('');
+  }
+  showCombo(prefix);
+}
+function onComboInput(prefix){
+  const val = document.getElementById(prefix+'InstSearch').value;
+  document.getElementById(prefix+'Inst').value = ''; // 재검색 시작하면 선택 해제
+  renderComboResults(prefix, val);
+}
+function onComboFocus(prefix){
+  renderComboResults(prefix, document.getElementById(prefix+'InstSearch').value);
+}
+function selectLoanInstrument(prefix, instId){
+  const inst = instruments.find(i=>i.id===instId);
+  if(!inst) return;
+  document.getElementById(prefix+'Inst').value = instId;
+  document.getElementById(prefix+'InstSearch').value = comboOptionLabel(inst);
+  hideCombo(prefix);
+  updateLoanSpecDisplay(prefix+'Inst', prefix==='loanOut'?'loanOutSpec':'loanInSpec');
+}
+function hideCombo(prefix){
+  document.getElementById(prefix+'InstResults').classList.remove('open');
+}
+function showCombo(prefix){
+  document.getElementById(prefix+'InstResults').classList.add('open');
+}
+document.addEventListener('click', e=>{
+  ['loanOut','loanIn'].forEach(prefix=>{
+    const wrap = document.getElementById(prefix+'InstSearch');
+    if(wrap && !wrap.parentElement.contains(e.target)) hideCombo(prefix);
+  });
+});
+
+function updateLoanSpecDisplay(selectId, targetId){
+  const hidden = document.getElementById(selectId);
+  const target = document.getElementById(targetId);
+  const inst = instruments.find(i=>i.id===hidden.value);
+  target.textContent = inst ? `제조사: ${inst.maker || '-'}${inst.serial ? ' · 고유번호: '+inst.serial : ''}` : '';
+}
+
+function processLoanOut(){
+  const instId = document.getElementById('loanOutInst').value;
+  const person = document.getElementById('loanOutPerson').value.trim();
+  const date = document.getElementById('loanOutDate').value || todayStr();
+  const detail = document.getElementById('loanOutDetail').value.trim();
+  if(!instId){ toast('대여할 계측기를 검색해서 목록에서 선택하세요.', 'error'); return; }
+  if(!person){ toast('대여자를 입력하세요.', 'error'); return; }
+  const inst = instruments.find(i=>i.id===instId);
+  if(!inst || inst.manageType!=='수불관리' || inst.status==='대여중'){ toast('선택한 계측기는 현재 대여할 수 없습니다. 목록에서 다시 선택하세요.', 'error'); return; }
+  inst.status = '대여중';
+  transactions.push({id:uid(), instId, type:'대여', person, date, note:detail, ts:new Date().toISOString()});
+  persistAll();
+  document.getElementById('loanOutPerson').value='';
+  document.getElementById('loanOutDetail').value='';
+  document.getElementById('loanOutInstSearch').value='';
+  document.getElementById('loanOutInst').value='';
+  renderAll();
+  toast(`${inst.name} 대여 처리되었습니다.`, 'success');
+}
+function processLoanIn(){
+  const instId = document.getElementById('loanInInst').value;
+  const note = document.getElementById('loanInNote').value.trim();
+  const date = document.getElementById('loanInDate').value || todayStr();
+  if(!instId){ toast('반납할 계측기를 검색해서 목록에서 선택하세요.', 'error'); return; }
+  const inst = instruments.find(i=>i.id===instId);
+  if(!inst || inst.status!=='대여중'){ toast('선택한 계측기는 현재 대여중이 아닙니다. 목록에서 다시 선택하세요.', 'error'); return; }
+  inst.status = '보관중';
+  transactions.push({id:uid(), instId, type:'반납', person:'', date, note, ts:new Date().toISOString()});
+  persistAll();
+  document.getElementById('loanInNote').value='';
+  document.getElementById('loanInInstSearch').value='';
+  document.getElementById('loanInInst').value='';
+  renderAll();
+  toast(`${inst.name} 반납 처리되었습니다.`, 'success');
+}
+function quickReturn(instId){
+  const inst = instruments.find(i=>i.id===instId);
+  if(!inst) return;
+  if(!confirm(`${inst.name} (${inst.code})을(를) 반납 처리할까요?`)) return;
+  const lastLoan = [...transactions].filter(t=>t.instId===instId && t.type==='대여').sort((a,b)=>b.date.localeCompare(a.date))[0];
+  const returnDate = lastLoan ? lastLoan.date : todayStr();
+  inst.status = '보관중';
+  transactions.push({id:uid(), instId, type:'반납', person:'', date:returnDate, note:'', ts:new Date().toISOString()});
+  persistAll();
+  renderAll();
+  toast('반납 처리되었습니다.', 'success');
+}
+
+function activeLoanRows(){
+  return instruments.filter(i=>i.status==='대여중').map(i=>{
+    const lastLoan = [...transactions].filter(t=>t.instId===i.id && t.type==='대여').sort((a,b)=>b.date.localeCompare(a.date))[0];
+    return {inst:i, loan:lastLoan};
+  });
+}
+function renderLoanTables(){
+  const rows = activeLoanRows();
+  const badgeEl = document.getElementById('badgeLoans');
+  if(rows.length){ badgeEl.style.display='inline-block'; badgeEl.textContent = rows.length; } else { badgeEl.style.display='none'; }
+
+  const elapsedHtml = (loan)=>{
+    if(!loan || !loan.date) return '-';
+    const d = daysBetween(loan.date, todayStr());
+    if(d>=14) return `<span class="badge warn">D+${d}</span>`;
+    return `<span class="badge neutral">D+${d}</span>`;
+  };
+
+  const tbody1 = document.getElementById('loanActiveTable');
+  tbody1.innerHTML = rows.map(r=>`
+    <tr>
+      <td class="mono-cell">${escapeHtml(r.inst.code)}</td>
+      <td>${escapeHtml(r.inst.name)}</td>
+      <td>${escapeHtml(r.inst.spec||'-')}</td>
+      <td>${escapeHtml(r.loan? r.loan.person : '-')}</td>
+      <td>${escapeHtml(r.loan && r.loan.note ? r.loan.note : '-')}</td>
+      <td class="mono-cell">${fmtDate(r.loan? r.loan.date : '-')}</td>
+      <td>${elapsedHtml(r.loan)}</td>
+      <td><button class="btn sm primary" onclick="quickReturn('${r.inst.id}')">반납</button></td>
+    </tr>
+  `).join('') || `<tr class="empty-row"><td colspan="8">현재 대여중인 계측기가 없습니다.</td></tr>`;
+
+  const tbody2 = document.getElementById('dashLoanTable');
+  tbody2.innerHTML = rows.slice(0,6).map(r=>`
+    <tr>
+      <td class="mono-cell">${escapeHtml(r.inst.code)}</td>
+      <td>${escapeHtml(r.inst.name)}</td>
+      <td>${escapeHtml(r.inst.spec||'-')}</td>
+      <td>${escapeHtml(r.loan? r.loan.person : '-')}</td>
+      <td>${escapeHtml(r.loan && r.loan.note ? r.loan.note : '-')}</td>
+      <td class="mono-cell">${fmtDate(r.loan? r.loan.date : '-')}</td>
+      <td>${elapsedHtml(r.loan)}</td>
+    </tr>
+  `).join('') || `<tr class="empty-row"><td colspan="7">현재 대여중인 계측기가 없습니다.</td></tr>`;
+}
+
+/* ============================================================
+   교정관리
+   ============================================================ */
+function openCalibModal(instId){
+  const inst = instruments.find(i=>i.id===instId);
+  if(!inst) return;
+  document.getElementById('calibModalTitle').textContent = '교정 이력 등록';
+  document.getElementById('calibSaveBtn').textContent = '교정 등록';
+  document.getElementById('calibEditId').value = '';
+  document.getElementById('calibInstId').value = inst.id;
+  document.getElementById('calibTargetLabel').textContent = `${inst.code} · ${inst.name} (${inst.spec||'-'})`;
+  document.getElementById('calibDate').value = todayStr();
+  document.getElementById('calibCycleInput').value = inst.cycle || 12;
+  document.getElementById('calibNextDate').value = addMonths(todayStr(), inst.cycle||12);
+  document.getElementById('calibResult').value = '합격';
+  document.getElementById('calibCertNo').value = '';
+  document.getElementById('calibAgency').value = '';
+  document.getElementById('calibNote').value = '';
+  openModal('calibModal');
+}
+function editCalibrationEntry(calibId){
+  const rec = calibrations.find(c=>c.id===calibId);
+  if(!rec) return;
+  const inst = instruments.find(i=>i.id===rec.instId);
+  document.getElementById('calibModalTitle').textContent = '교정 이력 수정';
+  document.getElementById('calibSaveBtn').textContent = '수정 저장';
+  document.getElementById('calibEditId').value = rec.id;
+  document.getElementById('calibInstId').value = rec.instId;
+  document.getElementById('calibTargetLabel').textContent = inst ? `${inst.code} · ${inst.name} (${inst.spec||'-'})` : '(삭제된 계측기)';
+  document.getElementById('calibDate').value = rec.calibDate || '';
+  document.getElementById('calibCycleInput').value = rec.cycle || 0;
+  document.getElementById('calibNextDate').value = rec.nextDate || '';
+  document.getElementById('calibResult').value = rec.result || '합격';
+  document.getElementById('calibCertNo').value = rec.certNo || '';
+  document.getElementById('calibAgency').value = rec.agency || '';
+  document.getElementById('calibNote').value = rec.note || '';
+  openModal('calibModal');
+}
+document.getElementById('calibDate').addEventListener('change', recalcCalibNext);
+document.getElementById('calibCycleInput').addEventListener('input', recalcCalibNext);
+function recalcCalibNext(){
+  const d = document.getElementById('calibDate').value;
+  const c = document.getElementById('calibCycleInput').value;
+  if(d) document.getElementById('calibNextDate').value = addMonths(d, c);
+}
+function recomputeInstrumentCalibFromHistory(instId){
+  const inst = instruments.find(i=>i.id===instId);
+  if(!inst) return;
+  const records = calibrations.filter(c=>c.instId===instId).sort((a,b)=>(b.calibDate||'').localeCompare(a.calibDate||''));
+  if(records.length){
+    const latest = records[0];
+    inst.lastCalibDate = latest.calibDate;
+    inst.nextCalibDate = latest.nextDate;
+    inst.cycle = latest.cycle || inst.cycle;
+    inst.certNo = latest.certNo || inst.certNo;
+  } else {
+    inst.lastCalibDate = '';
+    inst.nextCalibDate = '';
+  }
+}
+function saveCalibration(){
+  const instId = document.getElementById('calibInstId').value;
+  const editId = document.getElementById('calibEditId').value;
+  const inst = instruments.find(i=>i.id===instId);
+  if(!inst) return;
+  const calibDate = document.getElementById('calibDate').value;
+  const cycle = Number(document.getElementById('calibCycleInput').value)||0;
+  const nextDate = document.getElementById('calibNextDate').value;
+  if(!calibDate || !nextDate){ toast('교정일과 차기예정일을 입력하세요.', 'error'); return; }
+
+  const payload = {
+    instId, calibDate, nextDate, cycle,
+    result:document.getElementById('calibResult').value,
+    certNo:document.getElementById('calibCertNo').value.trim(),
+    agency:document.getElementById('calibAgency').value.trim(),
+    note:document.getElementById('calibNote').value.trim()
+  };
+
+  if(editId){
+    const idx = calibrations.findIndex(c=>c.id===editId);
+    if(idx>-1) calibrations[idx] = {...calibrations[idx], ...payload};
+  } else {
+    calibrations.push({id:uid(), ...payload, ts:new Date().toISOString()});
+  }
+  recomputeInstrumentCalibFromHistory(instId);
+  persistAll();
+  closeModal('calibModal');
+  renderAll();
+  toast(editId ? '교정 이력이 수정되었습니다.' : '교정 이력이 등록되었습니다.', 'success');
+}
+function deleteCalibrationEntry(calibId){
+  const rec = calibrations.find(c=>c.id===calibId);
+  if(!rec) return;
+  const inst = instruments.find(i=>i.id===rec.instId);
+  if(!confirm(`${inst?inst.code+' · '+inst.name:'계측기'}의 ${fmtDate(rec.calibDate)} 교정 이력을 삭제할까요?`)) return;
+  calibrations = calibrations.filter(c=>c.id!==calibId);
+  recomputeInstrumentCalibFromHistory(rec.instId);
+  persistAll();
+  renderAll();
+  toast('교정 이력이 삭제되었습니다.', 'success');
+}
+
+function renderCalibTable(){
+  const statusF = document.getElementById('calibStatusFilter').value;
+  const catF = document.getElementById('calibCatFilter').value;
+  let rows = instruments.filter(i=>i.status!=='폐기').filter(i=>{
+    if(catF && i.category!==catF) return false;
+    if(statusF){
+      const s = calibStatusOf(i).level;
+      if(s!==statusF) return false;
+    }
+    return true;
+  }).sort((a,b)=>{
+    const da = a.nextCalibDate || '9999-99-99';
+    const db = b.nextCalibDate || '9999-99-99';
+    return da.localeCompare(db);
+  });
+
+  const tbody = document.getElementById('calibTable');
+  tbody.innerHTML = rows.map(i=>{
+    const s = calibStatusOf(i);
+    let pct = 0, color = 'var(--success)';
+    if(i.lastCalibDate && i.nextCalibDate){
+      const total = daysBetween(i.lastCalibDate, i.nextCalibDate) || 1;
+      const elapsed = daysBetween(i.lastCalibDate, todayStr());
+      pct = Math.min(100, Math.max(0, Math.round((elapsed/total)*100)));
+      color = s.level==='danger' ? 'var(--danger)' : s.level==='warn' ? 'var(--amber)' : 'var(--success)';
+    }
+    return `<tr>
+      <td class="mono-cell">${escapeHtml(i.code)}</td>
+      <td>${escapeHtml(i.name)}</td>
+      <td>${escapeHtml(i.spec||'-')}</td>
+      <td>${i.calibType==='자체점검'?'<span class="badge neutral">자체점검</span>':'<span class="badge info">공인교정</span>'}</td>
+      <td class="mono-cell">${i.cycle?i.cycle+'개월':'-'}</td>
+      <td class="mono-cell">${fmtDate(i.lastCalibDate)||'-'}</td>
+      <td class="mono-cell">${fmtDate(i.nextCalibDate)||'-'}</td>
+      <td style="min-width:90px;"><div class="calib-scale"><div class="calib-scale-fill" style="width:${pct}%;background:${color};"></div></div></td>
+      <td>${badgeHtmlForCalib(i)}</td>
+      <td><button class="btn sm primary" onclick="openCalibModal('${i.id}')">교정등록</button></td>
+    </tr>`;
+  }).join('') || `<tr class="empty-row"><td colspan="10">해당 조건의 계측기가 없습니다.</td></tr>`;
+
+  // dashboard alert table (warn + danger only, top 8)
+  const alertRows = instruments.filter(i=>i.status!=='폐기').filter(i=>{
+    const s = calibStatusOf(i).level;
+    return s==='warn' || s==='danger';
+  }).sort((a,b)=>(a.nextCalibDate||'').localeCompare(b.nextCalibDate||'')).slice(0,8);
+  document.getElementById('dashCalibTable').innerHTML = alertRows.map(i=>`
+    <tr>
+      <td class="mono-cell">${escapeHtml(i.code)}</td>
+      <td>${escapeHtml(i.name)}</td>
+      <td>${escapeHtml(i.spec||'-')}</td>
+      <td class="mono-cell">${fmtDate(i.nextCalibDate)}</td>
+      <td>${badgeHtmlForCalib(i)}</td>
+      <td>${escapeHtml(i.location||'-')}</td>
+    </tr>
+  `).join('') || `<tr class="empty-row"><td colspan="6">임박·만료 계측기가 없습니다.</td></tr>`;
+
+  const dueCount = instruments.filter(i=>calibStatusOf(i).level==='warn').length;
+  const overdueCount = instruments.filter(i=>calibStatusOf(i).level==='danger').length;
+  document.getElementById('kpiDue').textContent = dueCount;
+  document.getElementById('kpiOverdue').textContent = overdueCount;
+  const badgeCalib = document.getElementById('badgeCalib');
+  const alertTotal = dueCount+overdueCount;
+  if(alertTotal){ badgeCalib.style.display='inline-block'; badgeCalib.textContent = alertTotal; } else { badgeCalib.style.display='none'; }
+}
+
+function renderCalibHistory(){
+  const rows = [...calibrations].sort((a,b)=>b.ts.localeCompare(a.ts));
+  const tbody = document.getElementById('calibHistTable');
+  tbody.innerHTML = rows.map(c=>{
+    const inst = instruments.find(i=>i.id===c.instId);
+    const resultBadge = c.result==='합격' ? 'ok' : c.result==='불합격' ? 'danger' : 'warn';
+    return `<tr>
+      <td class="mono-cell">${fmtDate(c.ts.slice(0,10))}</td>
+      <td class="mono-cell">${escapeHtml(inst?inst.code:'-')}</td>
+      <td>${escapeHtml(inst?inst.name:'(삭제됨)')}</td>
+      <td class="mono-cell">${fmtDate(c.calibDate)}</td>
+      <td class="mono-cell">${fmtDate(c.nextDate)}</td>
+      <td><span class="badge ${resultBadge}">${escapeHtml(c.result)}</span></td>
+      <td class="mono-cell">${escapeHtml(c.certNo||'-')}</td>
+      <td>${escapeHtml(c.agency||'-')}</td>
+      <td>${escapeHtml(c.note||'-')}</td>
+    </tr>`;
+  }).join('') || `<tr class="empty-row"><td colspan="9">등록된 교정 이력이 없습니다.</td></tr>`;
+}
+
+/* ============================================================
+   이력조회 (통합)
+   ============================================================ */
+function unifiedHistory(){
+  const txRows = transactions.map(t=>{
+    const inst = instruments.find(i=>i.id===t.instId);
+    return {
+      id: t.id, sourceType: 'tx', instId: t.instId,
+      ts: t.date, type: t.type,
+      code: inst?inst.code:'-', name: inst?inst.name:'(삭제됨)', spec: inst?(inst.spec||'-'):'-',
+      person: t.person || '-',
+      detail: t.type==='대여' ? (t.note ? `사용내역: ${t.note}` : '') : (t.note || '반납 완료')
+    };
+  });
+  const calibRows = calibrations.map(c=>{
+    const inst = instruments.find(i=>i.id===c.instId);
+    return {
+      id: c.id, sourceType: 'calib', instId: c.instId,
+      ts: c.calibDate, type:'교정',
+      code: inst?inst.code:'-', name: inst?inst.name:'(삭제됨)', spec: inst?(inst.spec||'-'):'-',
+      person: c.agency || '-',
+      detail: `결과: ${c.result} / 차기: ${c.nextDate}${c.certNo?(' / 성적서: '+c.certNo):''}`
+    };
+  });
+  return [...txRows, ...calibRows].sort((a,b)=>(b.ts||'').localeCompare(a.ts||''));
+}
+function renderHistoryTable(){
+  const search = (document.getElementById('histSearch').value||'').toLowerCase();
+  const typeF = document.getElementById('histTypeFilter').value;
+  const from = document.getElementById('histFrom').value;
+  const to = document.getElementById('histTo').value;
+
+  let rows = unifiedHistory().filter(r=>{
+    if(typeF && r.type!==typeF) return false;
+    if(from && r.ts < from) return false;
+    if(to && r.ts > to) return false;
+    if(search){
+      const hay = [r.code,r.name,r.spec,r.person,r.detail].join(' ').toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const tbody = document.getElementById('historyTable');
+  const typeBadge = t=>{
+    const map = {'대여':'info','반납':'neutral','교정':'warn'};
+    return `<span class="badge ${map[t]||'neutral'}">${t}</span>`;
+  };
+  tbody.innerHTML = rows.map(r=>`
+    <tr>
+      <td class="mono-cell">${fmtDate(r.ts)}</td>
+      <td>${typeBadge(r.type)}</td>
+      <td class="mono-cell">${escapeHtml(r.code)}</td>
+      <td>${escapeHtml(r.name)}</td>
+      <td>${escapeHtml(r.spec)}</td>
+      <td>${escapeHtml(r.person)}</td>
+      <td>${escapeHtml(r.detail)}</td>
+      <td class="row-actions">
+        <button class="btn sm ghost icon-btn" title="수정" onclick="editHistoryEntry('${r.sourceType}','${r.id}')">✏️</button>
+        <button class="btn sm ghost icon-btn" title="삭제" onclick="deleteHistoryEntry('${r.sourceType}','${r.id}')">🗑️</button>
+      </td>
+    </tr>
+  `).join('') || `<tr class="empty-row"><td colspan="8">조회된 이력이 없습니다.</td></tr>`;
+}
+
+function recomputeInstrumentLoanStatus(instId){
+  const inst = instruments.find(i=>i.id===instId);
+  if(!inst || inst.manageType!=='수불관리') return;
+  const records = transactions.filter(t=>t.instId===instId)
+    .sort((a,b)=> (a.date||'').localeCompare(b.date||'') || (a.ts||'').localeCompare(b.ts||''));
+  const latest = records[records.length-1];
+  inst.status = (latest && latest.type==='대여') ? '대여중' : '보관중';
+}
+
+function editHistoryEntry(sourceType, id){
+  if(sourceType==='calib'){ editCalibrationEntry(id); return; }
+  const rec = transactions.find(t=>t.id===id);
+  if(!rec) return;
+  const inst = instruments.find(i=>i.id===rec.instId);
+  document.getElementById('txEditId').value = rec.id;
+  document.getElementById('txEditTargetLabel').textContent = inst ? `${inst.code} · ${inst.name}` : '(삭제된 계측기)';
+  document.getElementById('txEditType').value = rec.type;
+  document.getElementById('txEditDate').value = rec.date || '';
+  document.getElementById('txEditPerson').value = rec.person || '';
+  document.getElementById('txEditNote').value = rec.note || '';
+  onTxEditTypeChange();
+  openModal('txEditModal');
+}
+function onTxEditTypeChange(){
+  const isLoan = document.getElementById('txEditType').value === '대여';
+  document.getElementById('txEditPersonWrap').style.display = isLoan ? '' : 'none';
+}
+function saveTxEdit(){
+  const id = document.getElementById('txEditId').value;
+  const idx = transactions.findIndex(t=>t.id===id);
+  if(idx<0) return;
+  const type = document.getElementById('txEditType').value;
+  const date = document.getElementById('txEditDate').value || transactions[idx].date;
+  const person = document.getElementById('txEditPerson').value.trim();
+  const note = document.getElementById('txEditNote').value.trim();
+  if(type==='대여' && !person){ toast('대여자를 입력하세요.', 'error'); return; }
+  const instId = transactions[idx].instId;
+  transactions[idx] = {...transactions[idx], type, date, person: type==='대여'?person:'', note};
+  recomputeInstrumentLoanStatus(instId);
+  persistAll();
+  closeModal('txEditModal');
+  renderAll();
+  toast('이력이 수정되었습니다.', 'success');
+}
+function deleteHistoryEntry(sourceType, id){
+  if(sourceType==='calib'){ deleteCalibrationEntry(id); return; }
+  const rec = transactions.find(t=>t.id===id);
+  if(!rec) return;
+  const inst = instruments.find(i=>i.id===rec.instId);
+  if(!confirm(`${inst?inst.code+' · '+inst.name:'계측기'}의 ${fmtDate(rec.date)} ${rec.type} 이력을 삭제할까요?`)) return;
+  transactions = transactions.filter(t=>t.id!==id);
+  recomputeInstrumentLoanStatus(rec.instId);
+  persistAll();
+  renderAll();
+  toast('이력이 삭제되었습니다.', 'success');
+}
+
+/* ============================================================
+   대시보드 KPI
+   ============================================================ */
+function renderDashboardKpis(){
+  document.getElementById('kpiTotal').textContent = instruments.filter(i=>i.status!=='폐기').length;
+  document.getElementById('kpiTotalSub').textContent = `분류 ${categories.length}종 · 폐기 ${instruments.filter(i=>i.status==='폐기').length}건 제외`;
+  const loaned = instruments.filter(i=>i.status==='대여중').length;
+  document.getElementById('kpiLoaned').textContent = loaned;
+}
+
+/* ============================================================
+   엑셀 내보내기 / 가져오기
+   ============================================================ */
+function instrumentsToSheetData(){
+  const header = ['관리번호','분류','품명','규격/모델','제조사','Model No.','Code No.','고유번호','위치/담당자','관리구분','교정구분','구매일','교정주기(개월)','최근교정일','차기교정일','성적서번호','상태','비고'];
+  const rows = instruments.map(i=>[i.code,i.category,i.name,i.spec,i.maker,i.modelNo||'',i.codeNo||'',i.serial,i.location,i.manageType,i.calibType,i.purchaseDate,i.cycle,i.lastCalibDate,i.nextCalibDate,i.certNo,i.status,i.note||'']);
+  return [header, ...rows];
+}
+function transactionsToSheetData(){
+  const header = ['일시','유형','관리번호','품명','규격/모델','담당자','세부내용/비고'];
+  const rows = unifiedHistory().filter(r=>r.type!=='교정').map(r=>[r.ts,r.type,r.code,r.name,r.spec,r.person,r.detail]);
+  return [header, ...rows];
+}
+function calibrationsToSheetData(){
+  const header = ['등록일시','관리번호','품명','교정일','차기예정일','결과','성적서번호','교정기관','비고'];
+  const rows = calibrations.map(c=>{
+    const inst = instruments.find(i=>i.id===c.instId);
+    return [c.ts.slice(0,19).replace('T',' '), inst?inst.code:'-', inst?inst.name:'(삭제됨)', c.calibDate, c.nextDate, c.result, c.certNo, c.agency, c.note];
+  });
+  return [header, ...rows];
+}
+function exportFullExcel(){
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(instrumentsToSheetData()), '계측기목록');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(transactionsToSheetData()), '대여이력');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(calibrationsToSheetData()), '교정이력');
+  XLSX.writeFile(wb, `계측기_수불대장_${todayStr()}.xlsx`);
+  toast('엑셀 파일이 다운로드되었습니다.', 'success');
+}
+function exportHistoryExcel(){
+  const wb = XLSX.utils.book_new();
+  const header = ['일시','유형','관리번호','품명','규격/모델','담당자/기관','세부내용'];
+  const rows = unifiedHistory().map(r=>[r.ts,r.type,r.code,r.name,r.spec,r.person,r.detail]);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, ...rows]), '이력조회');
+  XLSX.writeFile(wb, `계측기_이력조회_${todayStr()}.xlsx`);
+  toast('엑셀 파일이 다운로드되었습니다.', 'success');
+}
+function importInstrumentsExcel(){
+  const fileInput = document.getElementById('importFile');
+  const resultEl = document.getElementById('importResult');
+  if(!fileInput.files.length){ toast('파일을 선택하세요.', 'error'); return; }
+  const file = fileInput.files[0];
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(sheet, {header:1});
+      let added=0, skipped=0;
+      data.slice(1).forEach(row=>{
+        if(!row || !row[0]) { return; }
+        const [code,category,name,spec,maker,modelNo,codeNo,serial,location,manageType,calibType,purchaseDate,cycle,lastCalibDate,_ignoredNextDate,certNo,status,note] = row;
+        if(!code || !name){ skipped++; return; }
+        if(instruments.some(i=>i.code===String(code))){ skipped++; return; }
+        let catName = category ? String(category) : '기타';
+        if(!categories.some(c=>c.name===catName)){
+          categories.push({name:catName, prefix: catName.slice(0,3).toUpperCase()});
+        }
+        const cyc = Number(cycle)||0;
+        const lcd = lastCalibDate ? String(lastCalibDate).slice(0,10) : '';
+        const mt = (manageType && String(manageType).includes('현장')) ? '현장배치' : '수불관리';
+        const ct = (calibType && String(calibType).includes('자체')) ? '자체점검' : '공인교정';
+        instruments.push({
+          id:uid(), code:String(code), category:catName, name:String(name),
+          spec: spec?String(spec):'', maker: maker?String(maker):'', serial: serial?String(serial):'',
+          modelNo: modelNo?String(modelNo):'', codeNo: codeNo?String(codeNo):'',
+          manageType: mt, location: location?String(location):'',
+          purchaseDate: purchaseDate?String(purchaseDate).slice(0,10):'',
+          cycle: cyc, lastCalibDate: lcd, nextCalibDate: lcd && cyc ? addMonths(lcd,cyc) : '',
+          certNo: certNo?String(certNo):'', calibType: ct,
+          status: status?String(status):(mt==='수불관리'?'보관중':'배치완료'),
+          note: note?String(note):'',
+          createdAt: new Date().toISOString()
+        });
+        added++;
+      });
+      persistAll();
+      populateCategorySelects();
+      renderAll();
+      resultEl.textContent = `가져오기 완료: ${added}건 추가, ${skipped}건 건너뜀(중복/누락).`;
+      toast(`${added}건 가져오기 완료`, 'success');
+    }catch(err){
+      resultEl.textContent = '파일을 읽는 중 오류가 발생했습니다: ' + err.message;
+      toast('가져오기 실패', 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function resetAllData(){
+  if(!confirm('정말로 모든 데이터를 삭제할까요? 이 작업은 되돌릴 수 없습니다.')) return;
+  if(!confirm('마지막 확인입니다. 백업을 받으셨나요? 계속 진행하면 전체 데이터가 삭제됩니다.')) return;
+  instruments = []; transactions = []; calibrations = [];
+  persistAll();
+  renderAll();
+  toast('전체 데이터가 초기화되었습니다.', 'success');
+}
+
+/* ============================================================
+   렌더 전체
+   ============================================================ */
+function renderAll(){
+  populateCategorySelects();
+  renderInstrumentTable();
+  populateLoanSelects();
+  renderLoanTables();
+  renderCalibTable();
+  renderCalibHistory();
+  renderHistoryTable();
+  renderCategoryTable();
+  renderDashboardKpis();
+}
+
+['instSearch','instCatFilter','instManageFilter','instStatusFilter'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', renderInstrumentTable);
+  document.getElementById(id).addEventListener('change', renderInstrumentTable);
+});
+['calibStatusFilter','calibCatFilter'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', renderCalibTable);
+});
+['histSearch','histTypeFilter','histFrom','histTo'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', renderHistoryTable);
+  document.getElementById(id).addEventListener('change', renderHistoryTable);
+});
+
+function handleLoanScan(){
+  const input = document.getElementById('loanScanInput');
+  input.addEventListener('keydown', e=>{
+    if(e.key!=='Enter') return;
+    const code = input.value.trim();
+    if(!code) return;
+    const found = instruments.find(i=>i.code.toLowerCase()===code.toLowerCase());
+    if(!found){ toast('등록되지 않은 관리번호입니다.', 'error'); input.value=''; return; }
+    if(found.manageType!=='수불관리'){ toast(`${found.name}은(는) 현장/개인배치 계측기로 대여·반납 대상이 아닙니다.`, 'error'); input.value=''; return; }
+    if(found.status==='대여중'){
+      selectLoanInstrument('loanIn', found.id);
+      toast(`${found.name} — 반납 처리를 진행하세요.`);
+    } else {
+      selectLoanInstrument('loanOut', found.id);
+      toast(`${found.name} — 대여 처리를 진행하세요.`);
+    }
+    input.value='';
+  });
+}
+
+/* ============================================================
+   구글시트 연동 (모바일 QR 대여/반납)
+   ============================================================ */
+const GAS_KEYS = { url:'gauge_gas_url', token:'gauge_gas_token', appliedIds:'gauge_gas_applied', lastSync:'gauge_gas_lastsync' };
+
+function loadGasConfig(){
+  const url = localStorage.getItem(GAS_KEYS.url) || '';
+  const token = localStorage.getItem(GAS_KEYS.token) || '';
+  document.getElementById('gasUrlInput').value = url;
+  document.getElementById('gasTokenInput').value = token;
+  const last = localStorage.getItem(GAS_KEYS.lastSync);
+  if(last) document.getElementById('gasLastSync').textContent = `마지막 동기화: ${new Date(last).toLocaleString('ko-KR')}`;
+  return {url, token};
+}
+function saveGasConfig(){
+  const url = document.getElementById('gasUrlInput').value.trim();
+  const token = document.getElementById('gasTokenInput').value.trim();
+  if(!url || !token){ toast('URL과 토큰을 모두 입력하세요.', 'error'); return; }
+  localStorage.setItem(GAS_KEYS.url, url);
+  localStorage.setItem(GAS_KEYS.token, token);
+  toast('연동 설정을 저장했습니다.', 'success');
+}
+function getAppliedIds(){
+  try{ return new Set(JSON.parse(localStorage.getItem(GAS_KEYS.appliedIds) || '[]')); }catch(e){ return new Set(); }
+}
+function saveAppliedIds(set){
+  // 최근 2000건만 보관 (무한 누적 방지)
+  const arr = Array.from(set).slice(-2000);
+  localStorage.setItem(GAS_KEYS.appliedIds, JSON.stringify(arr));
+}
+
+async function checkPendingCount(){
+  const url = localStorage.getItem(GAS_KEYS.url);
+  const token = localStorage.getItem(GAS_KEYS.token);
+  const badge = document.getElementById('gasPendingBadge');
+  if(!url || !token){ badge.style.display='none'; return; }
+  try{
+    const res = await fetch(`${url}?action=pending&token=${encodeURIComponent(token)}`);
+    const data = await res.json();
+    const count = (data.items||[]).length;
+    if(count>0){ badge.style.display='inline-block'; badge.textContent = count; }
+    else { badge.style.display='none'; }
+  }catch(e){ /* 조용히 무시 — 대시보드 진입 시마다 시도하므로 오프라인이어도 문제 없음 */ }
+}
+
+async function pushListToSheet(showToast){
+  const url = localStorage.getItem(GAS_KEYS.url);
+  const token = localStorage.getItem(GAS_KEYS.token);
+  if(!url || !token){ if(showToast) toast('연동 URL/토큰을 먼저 저장하세요.', 'error'); return; }
+  if(!instruments.length){ if(showToast) toast('내보낼 계측기 데이터가 없습니다. 이 브라우저(페이지)에 등록된 계측기가 0건입니다.', 'error'); return; }
+  try{
+    const items = instruments.map(i=>({code:i.code, name:i.name, spec:i.spec||'', manageType:i.manageType||'', status:i.status||'', maker:i.maker||'', serial:i.serial||''}));
+    const res = await fetch(url, {method:'POST', body: JSON.stringify({action:'update_list', token, items})});
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+    if(showToast) toast(`계측기 목록 ${data.count}건을 모바일 폼 쪽으로 내보냈습니다.`, 'success');
+    return data;
+  }catch(err){
+    if(showToast) toast('내보내기 실패: '+err.message+' (file:// 로컬 실행 시 브라우저가 외부 요청을 막을 수 있습니다 — GitHub Pages에 배포한 뒤 그 주소에서 다시 시도해보세요.)', 'error');
+    throw err;
+  }
+}
+
+async function syncGoogleSheet(){
+  const {url, token} = loadGasConfig();
+  if(!url || !token){ toast('먼저 구글시트 연동 URL/토큰을 입력하고 저장하세요. (데이터 관리 화면)', 'error'); return; }
+  const btn = document.getElementById('gasSyncBtn');
+  btn.disabled = true;
+  try{
+    const res = await fetch(`${url}?action=pending&token=${encodeURIComponent(token)}`);
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+    const pending = data.items || [];
+    const applied = getAppliedIds();
+    const newlyApplied = [];
+    let count = 0;
+    pending.forEach(row=>{
+      if(applied.has(row.id)) return; // 이미 반영한 건 (안전장치)
+      const inst = instruments.find(i=>i.code===row.code);
+      if(!inst){ newlyApplied.push(row.id); return; } // 목록에 없는 계측기 — 동기화 대상에서 제외 처리
+      inst.status = row.type==='대여' ? '대여중' : '보관중';
+      const tsDate = row.ts ? new Date(row.ts) : new Date();
+      transactions.push({
+        id: 'gas_'+row.id, instId: inst.id, type: row.type,
+        person: row.person || '', date: tsDate.toISOString().slice(0,10),
+        note: row.note || '', ts: tsDate.toISOString(), source:'모바일QR'
+      });
+      applied.add(row.id);
+      newlyApplied.push(row.id);
+      count++;
+    });
+    if(newlyApplied.length){
+      persistAll();
+      saveAppliedIds(applied);
+      await fetch(url, {method:'POST', body: JSON.stringify({action:'mark_synced', token, ids:newlyApplied})});
+    }
+    await pushListToSheet(false);
+    renderAll();
+    document.getElementById('gasPendingBadge').style.display='none';
+    localStorage.setItem(GAS_KEYS.lastSync, new Date().toISOString());
+    document.getElementById('gasLastSync').textContent = `마지막 동기화: ${new Date().toLocaleString('ko-KR')} (신규 ${count}건 반영)`;
+    toast(count>0 ? `모바일 신청 ${count}건을 반영했습니다.` : '동기화 완료 — 새로운 신청이 없습니다.', 'success');
+  }catch(err){
+    toast('동기화 실패: '+err.message, 'error');
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+/* ============================================================
+   초기화
+   ============================================================ */
+function initDates(){
+  const d = todayStr();
+  document.getElementById('loanOutDate').value = d;
+  document.getElementById('loanInDate').value = d;
+  document.getElementById('todayDate').textContent = new Date().toLocaleDateString('ko-KR', {year:'numeric',month:'long',day:'numeric',weekday:'long'});
+}
+
+function seedSampleDataIfEmpty(){
+  if(instruments.length) return;
+  // no auto sample data — start clean per manufacturing use
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  initDates();
+  handleInstScan();
+  handleLoanScan();
+  seedSampleDataIfEmpty();
+  renderAll();
+  loadGasConfig();
+  checkPendingCount();
+});
+</script>
+</body>
+</html>
