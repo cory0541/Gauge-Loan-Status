@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>계측기 대여/반납</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#EEF1F5; --surface:#FFFFFF; --surface-alt:#F5F7FA;
+    --ink:#1C2530; --ink-muted:#64748B; --ink-faint:#94A3B8;
+    --primary:#1D5C8A; --primary-dark:#123F5E; --primary-tint:#E4EEF5;
+    --amber:#B4711F; --amber-tint:#FBF0E1;
+    --danger:#AC3B3B; --danger-tint:#F8E9E9;
+    --success:#2F7D4F; --success-tint:#E6F2EA;
+    --border:#DBE1E8; --border-strong:#C3CBD5;
+    --font-body:'IBM Plex Sans KR','IBM Plex Sans',sans-serif;
+    --font-mono:'IBM Plex Mono',monospace;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;font-family:var(--font-body);background:var(--bg);color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  header{
+    background:var(--primary-dark);color:#fff;padding:16px 18px 14px;position:sticky;top:0;z-index:10;
+    padding-top:calc(16px + env(safe-area-inset-top,0px));
+  }
+  header h1{margin:0;font-size:17px;font-weight:700;}
+  header .sub{font-family:var(--font-mono);font-size:11px;color:#9FC1D6;margin-top:3px;}
+  main{padding:14px 14px 40px;max-width:560px;margin:0 auto;}
+
+  .searchbar{display:flex;gap:8px;margin-bottom:12px;}
+  .searchbar input{
+    flex:1;font-size:15px;padding:12px 14px;border:1px solid var(--border-strong);border-radius:var(--radius);
+    background:#fff;color:var(--ink);
+  }
+  .searchbar input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-tint);}
+  .refresh-btn{
+    flex-shrink:0;width:44px;border:1px solid var(--border-strong);border-radius:var(--radius);background:#fff;
+    display:flex;align-items:center;justify-content:center;color:var(--primary);
+  }
+  .refresh-btn svg{width:18px;height:18px;}
+  .refresh-btn.spinning svg{animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .status-line{font-size:12px;color:var(--ink-faint);margin-bottom:10px;display:flex;justify-content:space-between;}
+
+  .list{display:flex;flex-direction:column;gap:8px;}
+  .item-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+  }
+  .item-card.selected{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary-tint);}
+  .item-main{min-width:0;}
+  .item-code{font-family:var(--font-mono);font-weight:600;font-size:12px;color:var(--primary-dark);}
+  .item-name{font-size:14.5px;font-weight:600;margin-top:2px;}
+  .item-spec{font-size:12px;color:var(--ink-muted);margin-top:1px;}
+  .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap;flex-shrink:0;}
+  .badge.ok{background:var(--success-tint);color:var(--success);}
+  .badge.info{background:var(--primary-tint);color:var(--primary-dark);}
+  .badge.warn{background:var(--amber-tint);color:var(--amber);}
+  .badge.danger{background:var(--danger-tint);color:var(--danger);}
+  .badge.neutral{background:var(--surface-alt);color:var(--ink-muted);border:1px solid var(--border);}
+  .empty{text-align:center;color:var(--ink-faint);padding:40px 10px;font-size:13px;}
+
+  .sheet-overlay{position:fixed;inset:0;background:rgba(15,23,32,.5);display:none;align-items:flex-end;z-index:100;}
+  .sheet-overlay.active{display:flex;}
+  .sheet{
+    background:#fff;width:100%;border-radius:16px 16px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px));
+    max-height:86vh;overflow-y:auto;
+  }
+  .sheet-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;}
+  .sheet-head h2{margin:0;font-size:16px;}
+  .sheet-close{background:none;border:none;font-size:20px;color:var(--ink-muted);padding:2px 6px;}
+  .sheet-code{font-family:var(--font-mono);font-size:12px;color:var(--ink-muted);margin-bottom:14px;}
+
+  .field{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-muted);font-weight:600;margin-bottom:12px;}
+  .field input, .field textarea{
+    font-family:var(--font-body);font-size:15px;padding:11px 12px;border:1px solid var(--border-strong);
+    border-radius:8px;background:#fff;color:var(--ink);
+  }
+  .field input:focus, .field textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-tint);}
+
+  .action-banner{padding:11px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;line-height:1.5;}
+  .action-banner.loan{background:var(--primary-tint);color:var(--primary-dark);}
+  .action-banner.return{background:var(--success-tint);color:var(--success);}
+  .action-banner.blocked{background:var(--danger-tint);color:var(--danger);}
+
+  .btn-submit{
+    width:100%;padding:14px;border:none;border-radius:10px;font-size:15.5px;font-weight:700;color:#fff;
+    background:var(--primary);cursor:pointer;
+  }
+  .btn-submit:disabled{background:var(--ink-faint);cursor:not-allowed;}
+  .btn-submit.return-mode{background:var(--success);}
+
+  .toast-wrap{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);z-index:200;width:calc(100% - 32px);max-width:520px;}
+  .toast{background:var(--ink);color:#fff;padding:12px 16px;border-radius:8px;font-size:13.5px;box-shadow:0 8px 20px rgba(0,0,0,.25);margin-top:8px;text-align:center;}
+  .toast.success{background:var(--success);}
+  .toast.error{background:var(--danger);}
+
+  .config-warning{background:var(--amber-tint);color:var(--amber);border:1px dashed var(--amber);border-radius:8px;padding:12px 14px;font-size:12.5px;line-height:1.6;margin-bottom:14px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>계측기 대여 / 반납</h1>
+  <div class="sub">GAUGE LEDGER · MOBILE</div>
+</header>
+
+<main>
+  <div id="configWarning" class="config-warning" style="display:none;">
+    이 페이지의 연동 설정(GAS_URL / GAS_TOKEN)이 비어 있습니다. 스크립트 상단의 설정값을 입력한 뒤 다시 배포해주세요.
+  </div>
+
+  <div class="searchbar">
+    <input type="text" id="searchInput" placeholder="관리번호, 품명, 규격 검색" autocomplete="off">
+    <button class="refresh-btn" id="refreshBtn" onclick="loadList(true)" aria-label="새로고침">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>
+    </button>
+  </div>
+  <div class="status-line">
+    <span id="listCount">불러오는 중...</span>
+    <span id="lastUpdated"></span>
+  </div>
+
+  <div class="list" id="list"></div>
+</main>
+
+<div class="sheet-overlay" id="sheetOverlay" onclick="if(event.target===this) closeSheet();">
+  <div class="sheet">
+    <div class="sheet-head">
+      <div>
+        <h2 id="sheetName"></h2>
+        <div class="sheet-code" id="sheetCodeSpec"></div>
+      </div>
+      <button class="sheet-close" onclick="closeSheet()">✕</button>
+    </div>
+
+    <div id="sheetBanner"></div>
+
+    <div id="sheetForm">
+      <label class="field">작업자 이름<input type="text" id="personInput" placeholder="예: 홍길동"></label>
+      <label class="field" id="noteFieldWrap">세부내용 (선택)<input type="text" id="noteInput" placeholder="예: 10mm, 25mm, 40mm 블록 사용"></label>
+    </div>
+
+    <button class="btn-submit" id="submitBtn" onclick="submitTx()">처리</button>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+/* ============================================================
+   설정 — Apps Script 배포 후 아래 두 값을 채워넣고 다시 저장/배포하세요.
+   Code.gs 상단의 TOKEN 값과 GAS_TOKEN이 반드시 일치해야 합니다.
+   ============================================================ */
+const GAS_URL = 'https://script.google.com/macros/s/여기에_배포된_웹앱_URL을_넣으세요/exec';
+const GAS_TOKEN = 'GAUGE-DDPRIMA-2026';
+
+let allItems = [];
+let filtered = [];
+let selected = null;
+
+function toast(msg, type){
+  const wrap = document.getElementById('toastWrap');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' '+type : '');
+  el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(()=>el.remove(), 3200);
+}
+
+function escapeHtml(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function statusBadge(status){
+  if(status==='보관중') return `<span class="badge ok">보관중 · 대여가능</span>`;
+  if(status==='대여중') return `<span class="badge info">대여중 · 반납대상</span>`;
+  if(status==='교정중') return `<span class="badge warn">교정중</span>`;
+  if(status==='수리중') return `<span class="badge warn">수리중</span>`;
+  if(status==='폐기') return `<span class="badge danger">폐기</span>`;
+  return `<span class="badge neutral">${escapeHtml(status||'-')}</span>`;
+}
+
+async function loadList(manual){
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  try{
+    const res = await fetch(`${GAS_URL}?action=list&token=${encodeURIComponent(GAS_TOKEN)}`);
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+    // 수불관리 대상만 노출 (현장배치는 대여/반납 개념 없음)
+    allItems = (data.items||[]).filter(it=>it.manageType==='수불관리');
+    document.getElementById('lastUpdated').textContent = '방금 갱신';
+    applyFilter();
+    if(manual) toast('목록을 새로고침했습니다.', 'success');
+  }catch(err){
+    toast('목록을 불러오지 못했습니다: '+err.message, 'error');
+  }finally{
+    btn.classList.remove('spinning');
+  }
+}
+
+function applyFilter(){
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  filtered = !q ? allItems.slice() : allItems.filter(it=>
+    (it.code||'').toLowerCase().includes(q) ||
+    (it.name||'').toLowerCase().includes(q) ||
+    (it.spec||'').toLowerCase().includes(q)
+  );
+  renderList();
+}
+
+function renderList(){
+  const list = document.getElementById('list');
+  document.getElementById('listCount').textContent = `${filtered.length}건 (전체 ${allItems.length}건)`;
+  if(!filtered.length){
+    list.innerHTML = `<div class="empty">검색 결과가 없습니다.</div>`;
+    return;
+  }
+  list.innerHTML = filtered.map(it=>`
+    <div class="item-card" onclick='openSheet(${JSON.stringify(it.code)})'>
+      <div class="item-main">
+        <div class="item-code">${escapeHtml(it.code)}</div>
+        <div class="item-name">${escapeHtml(it.name)}</div>
+        <div class="item-spec">${escapeHtml(it.spec||'-')}</div>
+      </div>
+      ${statusBadge(it.status)}
+    </div>
+  `).join('');
+}
+
+function openSheet(code){
+  const inst = allItems.find(i=>i.code===code);
+  if(!inst) return;
+  selected = inst;
+  document.getElementById('sheetName').textContent = inst.name;
+  document.getElementById('sheetCodeSpec').textContent = `${inst.code} · ${inst.spec||'규격 미기재'}`;
+
+  const banner = document.getElementById('sheetBanner');
+  const submitBtn = document.getElementById('submitBtn');
+  const form = document.getElementById('sheetForm');
+  const noteWrap = document.getElementById('noteFieldWrap');
+  submitBtn.classList.remove('return-mode');
+
+  const lastPerson = localStorage.getItem('gauge_last_person') || '';
+  document.getElementById('personInput').value = lastPerson;
+  document.getElementById('noteInput').value = '';
+
+  if(inst.status==='보관중'){
+    banner.innerHTML = `<div class="action-banner loan">현재 <b>보관중</b>인 계측기입니다. 아래 정보를 입력하고 <b>대여 처리</b>하세요.</div>`;
+    submitBtn.textContent = '대여 처리';
+    submitBtn.disabled = false;
+    form.style.display = '';
+    noteWrap.style.display = '';
+  } else if(inst.status==='대여중'){
+    banner.innerHTML = `<div class="action-banner return">현재 <b>대여중</b>인 계측기입니다. 아래 정보를 입력하고 <b>반납 처리</b>하세요.</div>`;
+    submitBtn.textContent = '반납 처리';
+    submitBtn.classList.add('return-mode');
+    submitBtn.disabled = false;
+    form.style.display = '';
+    noteWrap.style.display = 'none';
+  } else {
+    banner.innerHTML = `<div class="action-banner blocked">현재 상태(<b>${escapeHtml(inst.status)}</b>)에서는 모바일 대여/반납 처리를 할 수 없습니다. 품질실 담당자에게 문의하세요.</div>`;
+    submitBtn.disabled = true;
+    submitBtn.textContent = '처리 불가';
+    form.style.display = 'none';
+  }
+
+  document.getElementById('sheetOverlay').classList.add('active');
+}
+
+function closeSheet(){
+  document.getElementById('sheetOverlay').classList.remove('active');
+  selected = null;
+}
+
+async function submitTx(){
+  if(!selected) return;
+  const type = selected.status==='보관중' ? '대여' : '반납';
+  const person = document.getElementById('personInput').value.trim();
+  const note = document.getElementById('noteInput').value.trim();
+  if(!person){ toast('작업자 이름을 입력하세요.', 'error'); return; }
+
+  const submitBtn = document.getElementById('submitBtn');
+  submitBtn.disabled = true;
+  submitBtn.textContent = '처리 중...';
+  try{
+    const res = await fetch(GAS_URL, {
+      method:'POST',
+      body: JSON.stringify({action:'submit', token:GAS_TOKEN, code:selected.code, type, person, note})
+    });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || '처리에 실패했습니다.');
+    localStorage.setItem('gauge_last_person', person);
+    toast(data.message || `${type} 처리되었습니다.`, 'success');
+    closeSheet();
+    loadList(false);
+  }catch(err){
+    toast(err.message, 'error');
+    submitBtn.disabled = false;
+    submitBtn.textContent = type==='대여' ? '대여 처리' : '반납 처리';
+  }
+}
+
+document.getElementById('searchInput').addEventListener('input', applyFilter);
+
+if(GAS_URL.includes('여기에_배포된_웹앱_URL')){
+  document.getElementById('configWarning').style.display = 'block';
+} else {
+  loadList(false);
+}
+</script>
+</body>
+</html>
