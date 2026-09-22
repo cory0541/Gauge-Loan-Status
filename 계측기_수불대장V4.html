@@ -1103,7 +1103,7 @@ function compareInstruments(a, b, key){
 }
 function renderInstrumentTable(){
   const tbody = document.getElementById('instTable');
-  const search = (document.getElementById('instSearch').value||'').toLowerCase();
+  const search = (document.getElementById('instSearch').value||'').toLowerCase().normalize('NFC');
   const catF = document.getElementById('instCatFilter').value;
   const manageF = document.getElementById('instManageFilter').value;
   const statusF = document.getElementById('instStatusFilter').value;
@@ -1113,7 +1113,7 @@ function renderInstrumentTable(){
     if(manageF && i.manageType!==manageF) return false;
     if(statusF && i.status!==statusF) return false;
     if(search){
-      const hay = [i.code,i.name,i.spec,i.maker,i.serial,i.location,i.note,i.codeNo,i.modelNo].join(' ').toLowerCase();
+      const hay = [i.code,i.name,i.spec,i.maker,i.serial,i.location,i.note,i.codeNo,i.modelNo].join(' ').toLowerCase().normalize('NFC');
       if(!hay.includes(search)) return false;
     }
     return true;
@@ -1148,7 +1148,7 @@ function handleInstScan(){
     if(e.key!=='Enter') return;
     const code = input.value.trim();
     if(!code) return;
-    const found = instruments.find(i=>i.code.toLowerCase()===code.toLowerCase());
+    const found = instruments.find(i=>i.code.toLowerCase().normalize('NFC')===code.toLowerCase().normalize('NFC'));
     if(found){
       openInstrumentModal(found);
     } else {
@@ -1186,9 +1186,9 @@ function comboOptionLabel(i){ return `${i.code} · ${i.name}${i.spec ? ' (' + i.
 
 function renderComboResults(prefix, filterText){
   const listEl = document.getElementById(prefix+'InstResults');
-  const q = (filterText||'').trim().toLowerCase();
+  const q = (filterText||'').trim().toLowerCase().normalize('NFC');
   const options = loanComboOptions[prefix] || [];
-  const filtered = q ? options.filter(i => (i.code+' '+i.name+' '+(i.spec||'')).toLowerCase().includes(q)) : options;
+  const filtered = q ? options.filter(i => (i.code+' '+i.name+' '+(i.spec||'')).toLowerCase().normalize('NFC').includes(q)) : options;
   if(!options.length){
     listEl.innerHTML = `<div class="combo-empty">${prefix==='loanOut'?'대여 가능한 계측기가 없습니다.':'대여중인 계측기가 없습니다.'}</div>`;
   } else if(!filtered.length){
@@ -1784,7 +1784,7 @@ function handleLoanScan(){
     if(e.key!=='Enter') return;
     const code = input.value.trim();
     if(!code) return;
-    const found = instruments.find(i=>i.code.toLowerCase()===code.toLowerCase());
+    const found = instruments.find(i=>i.code.toLowerCase().normalize('NFC')===code.toLowerCase().normalize('NFC'));
     if(!found){ toast('등록되지 않은 관리번호입니다.', 'error'); input.value=''; return; }
     if(found.manageType!=='수불관리'){ toast(`${found.name}은(는) 현장/개인배치 계측기로 대여·반납 대상이 아닙니다.`, 'error'); input.value=''; return; }
     if(found.status==='대여중'){
