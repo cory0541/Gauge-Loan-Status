@@ -209,11 +209,11 @@ async function loadList(manual){
 }
 
 function applyFilter(){
-  const q = document.getElementById('searchInput').value.trim().toLowerCase().normalize('NFC');
+  const q = document.getElementById('searchInput').value.trim().toLowerCase().normalize('NFC').replace(/\s+/g,'');
   filtered = !q ? allItems.slice() : allItems.filter(it=>
-    (it.code||'').toLowerCase().normalize('NFC').includes(q) ||
-    (it.name||'').toLowerCase().normalize('NFC').includes(q) ||
-    (it.spec||'').toLowerCase().normalize('NFC').includes(q)
+    (it.code||'').toLowerCase().normalize('NFC').replace(/\s+/g,'').includes(q) ||
+    (it.name||'').toLowerCase().normalize('NFC').replace(/\s+/g,'').includes(q) ||
+    (it.spec||'').toLowerCase().normalize('NFC').replace(/\s+/g,'').includes(q)
   );
   renderList();
 }
